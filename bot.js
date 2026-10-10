@@ -4,12 +4,12 @@ const axios = require('axios');
 const bot = new Telegraf('8399272057:AAFFdGHrbMmdb3UiMWboNtTSfNlV_QyqcHw');
 const userSessions = {};
 
-// 1. كيبورد الهاتف السفلي (زر القائمة الرئيسية فقط)
+// كيبورد الهاتف السفلي (زر القائمة الرئيسية فقط)
 const replyKeyboard = Markup.keyboard([
   ['🏠 القائمة الرئيسية (/start)']
 ]).resize();
 
-// 2. أزرار الأدوات الشفافة
+// أزرار الأدوات الشفافة
 const mainInlineKeyboard = Markup.inlineKeyboard([
   [
     Markup.button.callback('📦 تنسيق JSON', 'tool_json'),
@@ -25,7 +25,7 @@ const mainInlineKeyboard = Markup.inlineKeyboard([
   ],
   [
     Markup.button.callback('🌐 ترجمة فورية', 'tool_translate'),
-    Markup.button.callback('📝 نص إلى PDF', 'tool_text_to_pdf')
+    Markup.button.callback('📝 نص إلى ملف نصي', 'tool_text_file')
   ],
   [
     Markup.button.callback('❌ إلغاء العملية الحالية', 'cancel_action')
@@ -50,7 +50,6 @@ bot.hears('🏠 القائمة الرئيسية (/start)', (ctx) => {
   return sendMainMenu(ctx, 'تمت العودة للقائمة الرئيسية.');
 });
 
-// ❌ إلغاء العملية الحالية دون إعادة إرسال قائمة الأدوات
 bot.action('cancel_action', (ctx) => {
   const hadActiveSession = !!userSessions[ctx.from.id];
   delete userSessions[ctx.from.id];
@@ -63,8 +62,7 @@ bot.action('cancel_action', (ctx) => {
   }
 });
 
-// ---------------- الخيارات والأدوات ----------------
-
+// الأدوات
 bot.action('tool_json', (ctx) => {
   userSessions[ctx.from.id] = 'json';
   ctx.answerCbQuery();
@@ -126,14 +124,13 @@ bot.action('tool_translate', (ctx) => {
   return ctx.reply('🌐 أداة الترجمة الفورية الذكية:\nأرسل أي نص بالعربية ليترجم إلى الإنجليزية، أو نصاً أجنبياً ليترجم إلى العربية تلقائياً.');
 });
 
-bot.action('tool_text_to_pdf', (ctx) => {
-  userSessions[ctx.from.id] = 'text_to_pdf';
+bot.action('tool_text_file', (ctx) => {
+  userSessions[ctx.from.id] = 'text_file';
   ctx.answerCbQuery();
-  return ctx.reply('📝 أداة تحويل النص إلى PDF:\nأرسل النص الذي تريد تضمينه وتحويله إلى مستند PDF.');
+  return ctx.reply('📝 أداة تصدير النصوص:\nأرسل النص الذي تريد تحويله وإرساله كملف نصي (.txt).');
 });
 
-// ---------------- معالجة النصوص والمدخلات ----------------
-
+// معالجة المدخلات
 bot.on('text', async (ctx) => {
   const userId = ctx.from.id;
   const tool = userSessions[userId];
@@ -187,13 +184,12 @@ bot.on('text', async (ctx) => {
       const isTunnel = suspiciousKeywords.some(keyword => urlLower.includes(keyword));
 
       let responseMsg = '';
-
       if (isTunnel) {
-        responseMsg = `⚠️ **تحذير أمني عالي!**\n\nالرابط يعتمد على خدمة أنفاق أو إعادة توجيه مؤقتة:\n\`${text}\`\n\nتُستخدم هذه الروابط كثيراً في اختبارات الاختراق والتصيد الاحتيالي، يُرجى الحذر وعدم فتح الرابط أو إدخال أي بيانات فيه!`;
+        responseMsg = `⚠️ **تحذير أمني عالي!**\n\nالرابط يعتمد على خدمة أنفاق أو إعادة توجيه مؤقتة:\n\`${text}\`\n\nتُستخدم هذه الروابط كثيراً في التصيد الاحتيالي، يُرجى الحذر!`;
       } else if (isHttps) {
-        responseMsg = `🔒 **فحص الاتصال:**\n\nالرابط يتيح التشفير (HTTPS).\n💡 *ملاحظة:* التشفير يحمي البيانات أثناء النقل ولكن يجب دائماً التثبت من هوية الموقع.`;
+        responseMsg = `🔒 **فحص الاتصال:** الرابط يستخدم تشفير (HTTPS).`;
       } else {
-        responseMsg = `🚨 **رابط غير آمن (HTTP):**\n\nهذا الرابط لا يمتلك شهادة تشفير، الاتصال به غير آمن.`;
+        responseMsg = `🚨 **رابط غير آمن (HTTP):** الاتصال غير مشفر.`;
       }
 
       return ctx.reply(responseMsg, { parse_mode: 'Markdown' });
@@ -201,10 +197,9 @@ bot.on('text', async (ctx) => {
 
     if (tool === 'ip') {
       delete userSessions[userId];
-      return ctx.reply(`🌐 نتيجة فحص العنوان (${text}):\nالعنوان جاهز للاستخدام ومقبول.`);
+      return ctx.reply(`🌐 نتيجة فحص العنوان (${text}): العنوان صالح.`);
     }
 
-    // 🌐 أداة الترجمة المصلحة تماماً
     if (tool === 'translate') {
       delete userSessions[userId];
       await ctx.reply('⏳ جاري ترجمة النص...');
@@ -228,38 +223,24 @@ bot.on('text', async (ctx) => {
       return ctx.reply(`🌐 **الترجمة (${directionMsg}):**\n\n${translatedText}`, { parse_mode: 'Markdown' });
     }
 
-    // 📝 أداة تحويل النص إلى PDF المضمونة 100%
-    if (tool === 'text_to_pdf') {
+    if (tool === 'text_file') {
       delete userSessions[userId];
-      await ctx.reply('⏳ جاري إنشاء مستند الـ PDF...');
-
-      const pdfBoxApi = `https://pdfobject.com/pdf/sample.pdf`; // رابط بديل مؤكد أو استخدام خدمة واجهة مستقرة
-      // سنستخدم خدمة ويب مباشرة لطباعة النص كنص برمجياً:
-      const safeText = encodeURIComponent(text);
-      const renderPdfUrl = `https://api.html2pdf.app/v1/generate?html=${safeText}&apiKey=public`;
-
+      const buffer = Buffer.from(text, 'utf-8');
       return ctx.replyWithDocument({
-        url: `https://dummypdf.com/api/v1/html?text=${safeText}`,
-        filename: 'document.pdf'
-      }, { caption: '✅ تم إنشاء مستند الـ PDF وتضمين النص بنجاح!' }).catch(async () => {
-        // في حال فشل الرابط الأول، نرسل ملف نصي بديل مضغوط أو رابط موثوق
-        const buffer = Buffer.from(text, 'utf-8');
-        await ctx.replyWithDocument({
-          source: buffer,
-          filename: 'text_content.txt'
-        }, { caption: '✅ تم إرسال محتوى النص كملف موثق.' });
-      });
+        source: buffer,
+        filename: 'document.txt'
+      }, { caption: '✅ تم إنشاء وإرسال الملف النصي بنجاح!' });
     }
 
   } catch (err) {
     console.error(err);
     delete userSessions[userId];
-    return ctx.reply('❌ حدث خطأ في معالجة الطلب، يرجى التأكد من المدخلات والمحاولة مجدداً.');
+    return ctx.reply('❌ حدث خطأ في معالجة الطلب، يرجى المحاولة مجدداً.');
   }
 });
 
 bot.launch().then(() => {
-  console.log('تم تشغيل البوت بنجاح والاتصال بتليجرام!');
+  console.log('تم تشغيل البوت بنجاح!');
 });
 
 process.once('SIGINT', () => bot.stop('SIGINT'));
