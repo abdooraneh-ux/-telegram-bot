@@ -4,12 +4,12 @@ const axios = require('axios');
 const bot = new Telegraf('8399272057:AAFFdGHrbMmdb3UiMWboNtTSfNlV_QyqcHw');
 const userSessions = {};
 
-// كيبورد الهاتف السفلي (زر القائمة الرئيسية فقط)
+// 1. كيبورد الهاتف السفلي (زر القائمة الرئيسية فقط)
 const replyKeyboard = Markup.keyboard([
   ['🏠 القائمة الرئيسية (/start)']
 ]).resize();
 
-// أزرار الأدوات الشفافة
+// 2. أزرار الأدوات الشفافة
 const mainInlineKeyboard = Markup.inlineKeyboard([
   [
     Markup.button.callback('📦 تنسيق JSON', 'tool_json'),
@@ -21,7 +21,7 @@ const mainInlineKeyboard = Markup.inlineKeyboard([
   ],
   [
     Markup.button.callback('🎲 توليد QR Code', 'tool_qr'),
-    Markup.button.callback('🌐 فحص IP', 'tool_ip')
+    Markup.button.callback('🌐 فحص IP & Classes', 'tool_ip')
   ],
   [
     Markup.button.callback('🌐 ترجمة فورية', 'tool_translate'),
@@ -32,6 +32,7 @@ const mainInlineKeyboard = Markup.inlineKeyboard([
   ]
 ]);
 
+// دالة إرسال القائمة الرئيسية
 function sendMainMenu(ctx, messageText) {
   const name = ctx.from ? ctx.from.first_name || 'عبدو' : 'عبدو';
   const text = messageText || `أهلاً بك يا ${name} 💻 اختر الأداة التي تريد استخدامها:`;
@@ -40,6 +41,7 @@ function sendMainMenu(ctx, messageText) {
   });
 }
 
+// أمر البدء
 bot.start((ctx) => {
   delete userSessions[ctx.from.id];
   return sendMainMenu(ctx);
@@ -50,6 +52,7 @@ bot.hears('🏠 القائمة الرئيسية (/start)', (ctx) => {
   return sendMainMenu(ctx, 'تمت العودة للقائمة الرئيسية.');
 });
 
+// إلغاء العملية الحالية
 bot.action('cancel_action', (ctx) => {
   const hadActiveSession = !!userSessions[ctx.from.id];
   delete userSessions[ctx.from.id];
@@ -62,7 +65,8 @@ bot.action('cancel_action', (ctx) => {
   }
 });
 
-// الأدوات
+// ================= اختيار الأدوات =================
+
 bot.action('tool_json', (ctx) => {
   userSessions[ctx.from.id] = 'json';
   ctx.answerCbQuery();
@@ -115,7 +119,7 @@ bot.action('tool_qr', (ctx) => {
 bot.action('tool_ip', (ctx) => {
   userSessions[ctx.from.id] = 'ip';
   ctx.answerCbQuery();
-  return ctx.reply('🌐 أداة فحص IP:\nأرسل عنوان الـ IP المطلوب تفحصه (مثل: 8.8.8.8).');
+  return ctx.reply('🌐 أداة فحص IP ومعرفة الفئة (Class):\nأرسل عنوان الـ IP المطلوب فحصه (مثال: 192.168.1.1).');
 });
 
 bot.action('tool_translate', (ctx) => {
@@ -130,7 +134,8 @@ bot.action('tool_text_file', (ctx) => {
   return ctx.reply('📝 أداة تصدير النصوص:\nأرسل النص الذي تريد تحويله وإرساله كملف نصي (.txt).');
 });
 
-// معالجة المدخلات
+// ================= معالجة مدخلات النصوص =================
+
 bot.on('text', async (ctx) => {
   const userId = ctx.from.id;
   const tool = userSessions[userId];
@@ -143,6 +148,7 @@ bot.on('text', async (ctx) => {
   }
 
   try {
+    // 1. تنسيق JSON
     if (tool === 'json') {
       delete userSessions[userId];
       const parsed = JSON.parse(text);
@@ -150,24 +156,28 @@ bot.on('text', async (ctx) => {
       return ctx.reply(`✅ تم تنسيق الـ JSON بنجاح:\n\n${formatted}`);
     }
 
+    // 2. تشفير Base64
     if (tool === 'b64_enc') {
       delete userSessions[userId];
       const encoded = Buffer.from(text).toString('base64');
       return ctx.reply(`✅ النتيجة بـ Base64:\n\n${encoded}`);
     }
 
+    // 3. فك تشفير Base64
     if (tool === 'b64_dec') {
       delete userSessions[userId];
       const decoded = Buffer.from(text, 'base64').toString('utf-8');
       return ctx.reply(`✅ نتيجة فك التشفير:\n\n${decoded}`);
     }
 
+    // 4. توليد QR Code
     if (tool === 'qr') {
       delete userSessions[userId];
       const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(text)}`;
       return ctx.replyWithPhoto(qrUrl, { caption: '✅ تم توليد رمز الـ QR بنجاح!' });
     }
 
+    // 5. تفكيك الرابط
     if (tool === 'url_inspect') {
       delete userSessions[userId];
       const targetUrl = text.startsWith('http') ? text : `https://${text}`;
@@ -176,6 +186,7 @@ bot.on('text', async (ctx) => {
       return ctx.reply(res);
     }
 
+    // 6. فحص أمان الرابط
     if (tool === 'url_safety') {
       delete userSessions[userId];
       const urlLower = text.toLowerCase();
@@ -195,11 +206,59 @@ bot.on('text', async (ctx) => {
       return ctx.reply(responseMsg, { parse_mode: 'Markdown' });
     }
 
+    // 7. فحص الـ IP والفئات (Classes)
     if (tool === 'ip') {
       delete userSessions[userId];
-      return ctx.reply(`🌐 نتيجة فحص العنوان (${text}): العنوان صالح.`);
+      
+      const ipPattern = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+      if (!ipPattern.test(text)) {
+        return ctx.reply('❌ صيغة الـ IP غير صحيحة، يرجى إدخال عنوان صحيح (مثال: 192.168.1.1)');
+      }
+
+      const octets = text.split('.').map(Number);
+      for (const octet of octets) {
+        if (octet < 0 || octet > 255) {
+          return ctx.reply('❌ أجزاء الـ IP يجب أن تكون بين 0 و 255.');
+        }
+      }
+
+      let ipClass = '';
+      let designation = 'عام (Public)';
+      const first = octets[0];
+      const second = octets[1];
+
+      if (first >= 1 && first <= 126) {
+        ipClass = 'Class A';
+        if (first === 10) designation = 'خاص (Private)';
+      } else if (first === 127) {
+        ipClass = 'Class A (Loopback)';
+        designation = 'حلقة محلية (Loopback)';
+      } else if (first >= 128 && first <= 191) {
+        ipClass = 'Class B';
+        if (first === 172 && second >= 16 && second <= 31) designation = 'خاص (Private)';
+      } else if (first >= 192 && first <= 223) {
+        ipClass = 'Class C';
+        if (first === 192 && second === 168) designation = 'خاص (Private)';
+      } else if (first >= 224 && first <= 239) {
+        ipClass = 'Class D (Multicast)';
+        designation = 'متعدد البث (Multicast)';
+      } else if (first >= 240 && first <= 255) {
+        ipClass = 'Class E (Experimental)';
+        designation = 'تجريبي (Experimental)';
+      } else {
+        ipClass = 'غير معروف';
+      }
+
+      const resultMsg = `🌐 **تحليل عنوان الـ IP:**\n\n` +
+        `• **العنوان:** \`${text}\`\n` +
+        `• **الفئة (Class):** **${ipClass}**\n` +
+        `• **النوع:** ${designation}\n` +
+        `• **أول بايت (First Octet):** ${first}`;
+
+      return ctx.reply(resultMsg, { parse_mode: 'Markdown' });
     }
 
+    // 8. الترجمة الفورية الذكية
     if (tool === 'translate') {
       delete userSessions[userId];
       await ctx.reply('⏳ جاري ترجمة النص...');
@@ -223,6 +282,7 @@ bot.on('text', async (ctx) => {
       return ctx.reply(`🌐 **الترجمة (${directionMsg}):**\n\n${translatedText}`, { parse_mode: 'Markdown' });
     }
 
+    // 9. تصدير النص كملف نصي
     if (tool === 'text_file') {
       delete userSessions[userId];
       const buffer = Buffer.from(text, 'utf-8');
@@ -235,7 +295,7 @@ bot.on('text', async (ctx) => {
   } catch (err) {
     console.error(err);
     delete userSessions[userId];
-    return ctx.reply('❌ حدث خطأ في معالجة الطلب، يرجى المحاولة مجدداً.');
+    return ctx.reply('❌ حدث خطأ في معالجة الطلب، يرجى التأكد من صحة المدخلات والمحاولة مجدداً.');
   }
 });
 
