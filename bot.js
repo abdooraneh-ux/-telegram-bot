@@ -21,6 +21,9 @@ bot.on('polling_error', (error) => console.log('Polling Error:', error.code || e
 process.on('uncaughtException', (err) => console.error('Uncaught Exception:', err));
 process.on('unhandledRejection', (reason) => console.error('Unhandled Rejection:', reason));
 
+// تخزين الحالة المؤقتة للمستخدمين (لتحديد الأداة المختارة)
+const userState = {};
+
 // أزرار القائمة الرئيسية
 const mainKeyboard = {
   inline_keyboard: [
@@ -44,6 +47,7 @@ const backKeyboard = {
 // الأمر /start
 bot.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id;
+  userState[chatId] = null; // إعادة تعيين الحالة
   bot.sendMessage(chatId, `أهلاً بك في بوت الأدوات البرمجية! 🛠️\nاختر إحدى الخدمات من القائمة أدناه:`, {
     reply_markup: mainKeyboard
   });
@@ -57,6 +61,7 @@ bot.on('callback_query', async (callbackQuery) => {
   const messageId = message.message_id;
 
   if (category === 'main_menu') {
+    userState[chatId] = null; // مسح الحالة عند الرجوع
     try {
       await bot.editMessageText(`أهلاً بك في بوت الأدوات البرمجية! 🛠️\nاختر إحدى الخدمات من القائمة أدناه:`, {
         chat_id: chatId,
@@ -70,10 +75,13 @@ bot.on('callback_query', async (callbackQuery) => {
     return;
   }
 
+  // حفظ الأداة التي اختارها المستخدم في الذاكرة المؤقتة
+  userState[chatId] = category;
+
   let replyText = '';
   switch (category) {
     case 'tool_qr':
-      replyText = '📱 أرسل النص، الرابط، أو الرقم الذي تريد تحويله إلى رمز QR:';
+      replyText = '📱 أرسل النص أو الرابط أو الرقم الذي تريد تحويله إلى رمز QR:';
       break;
     case 'tool_base64_enc':
       replyText = '🔐 أرسل النص الذي تريد تشفيره بنظام Base64:';
@@ -113,21 +121,30 @@ bot.on('callback_query', async (callbackQuery) => {
   bot.answerCallbackQuery(callbackQuery.id);
 });
 
-// معالجة النصوص المرسلة
+// معالجة النصوص المرسلة بناءً على الأداة المختارة فقط
 bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
   const text = msg.text;
 
   if (!text || text.startsWith('/start')) return;
 
-  try {
-    // توليد QR Code لأي نص أو رقم يرسله المستخدم مباشرة
-    const qrImage = await QRCode.toBuffer(text);
-    return bot.sendPhoto(chatId, qrImage, { 
-      caption: '✅ تم إنشاء رمز الـ QR بنجاح!',
-      reply_markup: backKeyboard
-    });
+  const currentTool = userState[chatId];
 
+  // إذا لم يختار المستخدم أي أداة بعد، لا نفعل شيئاً مزعجاً
+  if (!currentTool) return;
+
+  try {
+    if (currentTool === 'tool_qr') {
+      const qrImage = await QRCode.toBuffer(text);
+      userState[chatId] = null; // إعادة تعيين الحالة بعد الإنجاز
+      return bot.sendPhoto(chatId, qrImage, { 
+        caption: '✅ تم إنشاء رمز الـ QR بنجاح!',
+        reply_markup: mainKeyboard
+      });
+    }
+
+    // هنا يمكنك إضافة بقية الأدوات لاحقاً حسب الحاجة
+    
   } catch (err) {
     console.error('Error:', err);
     bot.sendMessage(chatId, '⚠️ حدث خطأ أثناء المعالجة، يرجى المحاولة مرة أخرى.', { reply_markup: backKeyboard });
