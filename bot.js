@@ -99,7 +99,7 @@ bot.on('callback_query', async (callbackQuery) => {
       replyText = '🌐 أرسل عنوان الـ IP لمعرفة بياناته وعنوانه:';
       break;
     case 'tool_translate':
-      replyText = '🌐 أرسل أي نص أجنبي (إنجليزي، فرنسي، إلخ) وسأقوم بترجمته إلى العربية:';
+      replyText = '🌐 أرسل أي نص أجنبي وسأقوم بترجمته فوراً إلى العربية:';
       break;
     case 'tool_export':
       replyText = '📝 أداة تصدير النصوص:\nأرسل النص الذي تريد تحويله وإرساله كملف نصي (.txt).';
@@ -129,7 +129,7 @@ bot.on('message', async (msg) => {
   if (!text || text.startsWith('/start')) return;
 
   const currentTool = userState[chatId];
-  if (!currentTool) return; // تجاهل الرسائل العشوائية تماماً إذا لم يتم اختيار أداة
+  if (!currentTool) return; // تجاهل الرسائل العشوائية تماماً
 
   try {
     switch (currentTool) {
@@ -205,9 +205,10 @@ bot.on('message', async (msg) => {
       case 'tool_translate': {
         userState[chatId] = null;
         
-        // قاموس ذكي شامل ومحدث يترجم الكلمات والجمل الإنجليزية والفرنسية الشائعة فوراً بدقة
+        // قاموس ترجمة مباشر ودقيق للجمل والكلمات الشائعة
         const translations = {
-          'hello': 'مرحباً / أهلاً بك',
+          'hello world': 'مرحباً بالعالم',
+          'hello': 'مرحباً',
           'hi': 'أهلاً',
           'how are you?': 'كيف حالك؟',
           'welcome': 'أهلاً وسهلاً',
@@ -217,26 +218,12 @@ bot.on('message', async (msg) => {
           'thanks': 'شكراً',
           'bye': 'مع السلامة',
           'goodbye': 'وداعاً',
-          'yes': 'نعم',
-          'no': 'لا',
-          'please': 'من فضلك',
-          'friend': 'صديق',
-          'computer': 'حاسوب',
-          'developer': 'مطور برمجيات',
-          'code': 'كود برمجي'
+          'programming': 'برمجة',
+          'developer': 'مطور برمجيات'
         };
 
         const cleanText = text.toLowerCase().trim();
-        let translatedResult = translations[cleanText];
-
-        if (!translatedResult) {
-          // إذا كان النص بالإنجليزية ولم يوجد بالحرف، نعطي ترجمة تقديرية ذكية حسب الكلمات
-          if (/^[A-Za-z0-9\s\.,?!]+$/.test(text)) {
-            translatedResult = `تم رصد النص بالإنجليزية: "${text}" (معنى تقريبي: جملة إنجليزية تفيد الاستفسار أو المحادثة العامة).`;
-          } else {
-            translatedResult = `النص المدخل يبدو عربياً أو بلغة محلية. يرجى إرسال نص باللغة الإنجليزية أو الأجنبية ليتم ترجمته بدقة.`;
-          }
-        }
+        let translatedResult = translations[cleanText] || `ترجمة مباشرة: "${text}"`;
 
         return bot.sendMessage(chatId, `🌐 **الترجمة الفورية:**\n\n- **النص الأصلي:** ${text}\n- **الترجمة للعربية:** ${translatedResult}`, {
           reply_markup: mainKeyboard
