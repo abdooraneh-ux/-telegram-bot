@@ -32,7 +32,6 @@ const mainInlineKeyboard = Markup.inlineKeyboard([
   ]
 ]);
 
-// دالة إرسال القائمة الرئيسية
 function sendMainMenu(ctx, messageText) {
   const name = ctx.from ? ctx.from.first_name || 'عبدو' : 'عبدو';
   const text = messageText || `أهلاً بك يا ${name} 💻 اختر الأداة التي تريد استخدامها:`;
@@ -41,7 +40,6 @@ function sendMainMenu(ctx, messageText) {
   });
 }
 
-// أمر البدء
 bot.start((ctx) => {
   delete userSessions[ctx.from.id];
   return sendMainMenu(ctx);
@@ -52,7 +50,6 @@ bot.hears('🏠 القائمة الرئيسية (/start)', (ctx) => {
   return sendMainMenu(ctx, 'تمت العودة للقائمة الرئيسية.');
 });
 
-// إلغاء العملية الحالية
 bot.action('cancel_action', (ctx) => {
   const hadActiveSession = !!userSessions[ctx.from.id];
   delete userSessions[ctx.from.id];
@@ -65,8 +62,7 @@ bot.action('cancel_action', (ctx) => {
   }
 });
 
-// ================= اختيار الأدوات =================
-
+// الأدوات
 bot.action('tool_json', (ctx) => {
   userSessions[ctx.from.id] = 'json';
   ctx.answerCbQuery();
@@ -134,8 +130,7 @@ bot.action('tool_text_file', (ctx) => {
   return ctx.reply('📝 أداة تصدير النصوص:\nأرسل النص الذي تريد تحويله وإرساله كملف نصي (.txt).');
 });
 
-// ================= معالجة مدخلات النصوص =================
-
+// المعالجة
 bot.on('text', async (ctx) => {
   const userId = ctx.from.id;
   const tool = userSessions[userId];
@@ -148,7 +143,6 @@ bot.on('text', async (ctx) => {
   }
 
   try {
-    // 1. تنسيق JSON
     if (tool === 'json') {
       delete userSessions[userId];
       const parsed = JSON.parse(text);
@@ -156,28 +150,24 @@ bot.on('text', async (ctx) => {
       return ctx.reply(`✅ تم تنسيق الـ JSON بنجاح:\n\n${formatted}`);
     }
 
-    // 2. تشفير Base64
     if (tool === 'b64_enc') {
       delete userSessions[userId];
       const encoded = Buffer.from(text).toString('base64');
       return ctx.reply(`✅ النتيجة بـ Base64:\n\n${encoded}`);
     }
 
-    // 3. فك تشفير Base64
     if (tool === 'b64_dec') {
       delete userSessions[userId];
       const decoded = Buffer.from(text, 'base64').toString('utf-8');
       return ctx.reply(`✅ نتيجة فك التشفير:\n\n${decoded}`);
     }
 
-    // 4. توليد QR Code
     if (tool === 'qr') {
       delete userSessions[userId];
       const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(text)}`;
       return ctx.replyWithPhoto(qrUrl, { caption: '✅ تم توليد رمز الـ QR بنجاح!' });
     }
 
-    // 5. تفكيك الرابط
     if (tool === 'url_inspect') {
       delete userSessions[userId];
       const targetUrl = text.startsWith('http') ? text : `https://${text}`;
@@ -186,7 +176,6 @@ bot.on('text', async (ctx) => {
       return ctx.reply(res);
     }
 
-    // 6. فحص أمان الرابط
     if (tool === 'url_safety') {
       delete userSessions[userId];
       const urlLower = text.toLowerCase();
@@ -196,7 +185,7 @@ bot.on('text', async (ctx) => {
 
       let responseMsg = '';
       if (isTunnel) {
-        responseMsg = `⚠️ **تحذير أمني عالي!**\n\nالرابط يعتمد على خدمة أنفاق أو إعادة توجيه مؤقتة:\n\`${text}\`\n\nتُستخدم هذه الروابط كثيراً في التصيد الاحتيالي، يُرجى الحذر!`;
+        responseMsg = `⚠️ **تحذير أمني عالي!**\n\nالرابط يعتمد على خدمة أنفاق أو إعادة توجيه مؤقتة:\n\`${text}\``;
       } else if (isHttps) {
         responseMsg = `🔒 **فحص الاتصال:** الرابط يستخدم تشفير (HTTPS).`;
       } else {
@@ -206,7 +195,6 @@ bot.on('text', async (ctx) => {
       return ctx.reply(responseMsg, { parse_mode: 'Markdown' });
     }
 
-    // 7. فحص الـ IP والفئات (Classes)
     if (tool === 'ip') {
       delete userSessions[userId];
       
@@ -258,7 +246,6 @@ bot.on('text', async (ctx) => {
       return ctx.reply(resultMsg, { parse_mode: 'Markdown' });
     }
 
-    // 8. الترجمة الفورية الذكية
     if (tool === 'translate') {
       delete userSessions[userId];
       await ctx.reply('⏳ جاري ترجمة النص...');
@@ -282,7 +269,6 @@ bot.on('text', async (ctx) => {
       return ctx.reply(`🌐 **الترجمة (${directionMsg}):**\n\n${translatedText}`, { parse_mode: 'Markdown' });
     }
 
-    // 9. تصدير النص كملف نصي
     if (tool === 'text_file') {
       delete userSessions[userId];
       const buffer = Buffer.from(text, 'utf-8');
@@ -295,7 +281,7 @@ bot.on('text', async (ctx) => {
   } catch (err) {
     console.error(err);
     delete userSessions[userId];
-    return ctx.reply('❌ حدث خطأ في معالجة الطلب، يرجى التأكد من صحة المدخلات والمحاولة مجدداً.');
+    return ctx.reply('❌ حدث خطأ في معالجة الطلب، يرجى المحاولة مجدداً.');
   }
 });
 
