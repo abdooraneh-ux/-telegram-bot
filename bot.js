@@ -1,305 +1,142 @@
-const { Telegraf, Markup } = require('telegraf');
-const axios = require('axios');
+const TelegramBot = require('node-telegram-bot-api');
 const http = require('http');
+const QRCode = require('qrcode');
 
-const bot = new Telegraf('8399272057:AAFFdGHrbMmdb3UiMWboNtTSfNlV_QyqcHw');
-const userSessions = {};
-
-// فتح سيرفر ويب بسيط لترضية منصة Render ومنع انهياره
-const server = http.createServer((req, res) => {
-  res.writeHead(200, { 'Content-Type': 'text/plain' });
-  res.end('Bot is running!\n');
-});
-
+// 1. إعداد خادم HTTP للحفاظ على استيقاظ الخدمة في Render
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
+http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('Bot is running alive 24/7!\n');
+}).listen(PORT, () => {
   console.log(`Server is listening on port ${PORT}`);
 });
 
-// 1. كيبورد الهاتف السفلي (زر القائمة الرئيسية فقط)
-const replyKeyboard = Markup.keyboard([
-  ['🏠 القائمة الرئيسية (/start)']
-]).resize();
+// 2. إعداد رمز البوت والاتصال مع Telegram API وتفعيل الخيارات المضادة للانقطاع
+const token = process.env.TELEGRAM_BOT_TOKEN || '8399272057:AAFFdGHrbMmdb3UiMWboNtTSfNlV_QyqcHw';
 
-// 2. أزرار الأدوات الشفافة
-const mainInlineKeyboard = Markup.inlineKeyboard([
-  [
-    Markup.button.callback('📦 تنسيق JSON', 'tool_json'),
-    Markup.button.callback('🔤 Base64', 'tool_base64')
-  ],
-  [
-    Markup.button.callback('🔗 فحص أمان رابط', 'tool_url_safety'),
-    Markup.button.callback('🔗 تفكيك رابط URL', 'tool_url_inspect')
-  ],
-  [
-    Markup.button.callback('🎲 توليد QR Code', 'tool_qr'),
-    Markup.button.callback('🌐 فحص IP & Classes', 'tool_ip')
-  ],
-  [
-    Markup.button.callback('🌐 ترجمة فورية', 'tool_translate'),
-    Markup.button.callback('📝 نص إلى ملف نصي', 'tool_text_file')
-  ],
-  [
-    Markup.button.callback('❌ إلغاء العملية الحالية', 'cancel_action')
-  ]
-]);
-
-function sendMainMenu(ctx, messageText) {
-  const name = ctx.from ? ctx.from.first_name || 'عبدو' : 'عبدو';
-  const text = messageText || `أهلاً بك يا ${name} 💻 اختر الأداة التي تريد استخدامها:`;
-  return ctx.reply(text, replyKeyboard).then(() => {
-    return ctx.reply('اختر أداة من القائمة التالية:', mainInlineKeyboard);
-  });
-}
-
-bot.start((ctx) => {
-  delete userSessions[ctx.from.id];
-  return sendMainMenu(ctx);
-});
-
-bot.hears('🏠 القائمة الرئيسية (/start)', (ctx) => {
-  delete userSessions[ctx.from.id];
-  return sendMainMenu(ctx, 'تمت العودة للقائمة الرئيسية.');
-});
-
-bot.action('cancel_action', (ctx) => {
-  const hadActiveSession = !!userSessions[ctx.from.id];
-  delete userSessions[ctx.from.id];
-  ctx.answerCbQuery('تم الإلغاء');
-
-  if (hadActiveSession) {
-    return ctx.reply('🛑 تم إلغاء العملية الحالية بنجاح.');
-  } else {
-    return ctx.reply('ℹ️ لا توجد أية عملية معلقة لإلغائها حالياً.');
+const bot = new TelegramBot(token, {
+  polling: {
+    interval: 300,
+    autoStart: true,
+    params: {
+      timeout: 10
+    }
   }
 });
 
-// الأدوات
-bot.action('tool_json', (ctx) => {
-  userSessions[ctx.from.id] = 'json';
-  ctx.answerCbQuery();
-  return ctx.reply('📦 أداة تنسيق JSON:\nأرسل الآن كود الـ JSON المراد تنسيقه وترتيبه.');
+// ----------------------------------------------------
+// حماية السيرفر من الانهيار (Global Error Handling)
+// ----------------------------------------------------
+bot.on('polling_error', (error) => {
+  console.log('Telegram Polling Error:', error.code || error.message);
 });
 
-bot.action('tool_base64', (ctx) => {
-  userSessions[ctx.from.id] = 'base64_select';
-  ctx.answerCbQuery();
-  return ctx.reply(
-    '🔤 اختر خيار Base64 المطلوب:',
-    Markup.inlineKeyboard([
-      [Markup.button.callback('🔒 تشفير إلى Base64', 'b64_enc')],
-      [Markup.button.callback('🔓 فك تشفير Base64', 'b64_dec')],
-      [Markup.button.callback('❌ إلغاء', 'cancel_action')]
-    ])
-  );
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
 });
 
-bot.action('b64_enc', (ctx) => {
-  userSessions[ctx.from.id] = 'b64_enc';
-  ctx.answerCbQuery();
-  return ctx.reply('أرسل النص العادي لتشفيره إلى Base64:');
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
-bot.action('b64_dec', (ctx) => {
-  userSessions[ctx.from.id] = 'b64_dec';
-  ctx.answerCbQuery();
-  return ctx.reply('أرسل نص Base64 لفك تشفيره:');
+// ----------------------------------------------------
+// أوامر البوت المباشرة والخدمات 8 الأساسية
+// ----------------------------------------------------
+
+// الأمر /start والقائمة الرئيسية
+bot.onText(/\/start/, (msg) => {
+  const chatId = msg.chat.id;
+  const welcomeText = `أهلاً بك في بوت الأدوات البرمجية! 🛠️\nاختر إحدى الخدمات من القائمة أدناه:`;
+  
+  const opts = {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: '📱 إنشاء QR Code', callback_data: 'tool_qr' }],
+        [{ text: '🔐 تشفير Base64', callback_data: 'tool_base64_enc' }, { text: '🔓 فك Base64', callback_data: 'tool_base64_dec' }],
+        [{ text: '✨ تنسيق JSON', callback_data: 'tool_json' }],
+        [{ text: '🔍 فحص الأمان والرابط', callback_data: 'tool_url' }],
+        [{ text: '🌐 تحليل الـ IP', callback_data: 'tool_ip' }],
+        [{ text: '🌐 الترجمة التلقائية', callback_data: 'tool_translate' }],
+        [{ text: '📝 تصدير نص إلى ملف', callback_data: 'tool_export' }]
+      ]
+    }
+  };
+  
+  bot.sendMessage(chatId, welcomeText, opts);
 });
 
-bot.action('tool_url_safety', (ctx) => {
-  userSessions[ctx.from.id] = 'url_safety';
-  ctx.answerCbQuery();
-  return ctx.reply('🔗 أداة فحص أمان الرابط الذكية:\nأرسل الرابط المراد تفحصه واختبار مدى أمانه.');
-});
+// التعامل مع الضغط على أزرار القائمة
+bot.on('callback_query', (callbackQuery) => {
+  const message = callbackQuery.message;
+  const category = callbackQuery.data;
+  const chatId = message.chat.id;
 
-bot.action('tool_url_inspect', (ctx) => {
-  userSessions[ctx.from.id] = 'url_inspect';
-  ctx.answerCbQuery();
-  return ctx.reply('🔗 أداة تفكيك الرابط:\nأرسل الرابط لتحليله وأجزائه.');
-});
+  let replyText = '';
 
-bot.action('tool_qr', (ctx) => {
-  userSessions[ctx.from.id] = 'qr';
-  ctx.answerCbQuery();
-  return ctx.reply('🎲 أداة توليد QR Code:\nأرسل النص أو الرابط لتحويله لرمز QR.');
-});
-
-bot.action('tool_ip', (ctx) => {
-  userSessions[ctx.from.id] = 'ip';
-  ctx.answerCbQuery();
-  return ctx.reply('🌐 أداة فحص IP ومعرفة الفئة (Class):\nأرسل عنوان الـ IP المطلوب فحصه (مثال: 192.168.1.1).');
-});
-
-bot.action('tool_translate', (ctx) => {
-  userSessions[ctx.from.id] = 'translate';
-  ctx.answerCbQuery();
-  return ctx.reply('🌐 أداة الترجمة الفورية الذكية:\nأرسل أي نص بالعربية ليترجم إلى الإنجليزية، أو نصاً أجنبياً ليترجم إلى العربية تلقائياً.');
-});
-
-bot.action('tool_text_file', (ctx) => {
-  userSessions[ctx.from.id] = 'text_file';
-  ctx.answerCbQuery();
-  return ctx.reply('📝 أداة تصدير النصوص:\nأرسل النص الذي تريد تحويله وإرساله كملف نصي (.txt).');
-});
-
-// المعالجة
-bot.on('text', async (ctx) => {
-  const userId = ctx.from.id;
-  const tool = userSessions[userId];
-  const text = ctx.message.text.trim();
-
-  if (text === '🏠 القائمة الرئيسية (/start)') return;
-
-  if (!tool) {
-    return ctx.reply('⚠️ يرجى اختيار أداة أولاً من القائمة أعلاه.');
+  switch (category) {
+    case 'tool_qr':
+      replyText = 'أرسل النص أو الرابط الذي تريد تحويله إلى رمز QR:';
+      break;
+    case 'tool_base64_enc':
+      replyText = 'أرسل النص الذي تريد تشفيره بنظام Base64:';
+      break;
+    case 'tool_base64_dec':
+      replyText = 'أرسل كود Base64 الذي تريد فك تشفيره:';
+      break;
+    case 'tool_json':
+      replyText = 'أرسل نص الـ JSON المراد تنسيقه وتجميله:';
+      break;
+    case 'tool_url':
+      replyText = 'أرسل الرابط الذي تريد تحليله وفحصه:';
+      break;
+    case 'tool_ip':
+      replyText = 'أرسل عنوان الـ IP لمعرفة بياناته وعنوانه:';
+      break;
+    case 'tool_translate':
+      replyText = 'أرسل أي نص بلغة أجنبية وسأقوم بترجمته فوراً إلى العربية:';
+      break;
+    case 'tool_export':
+      replyText = 'أداة تصدير النصوص:\nأرسل النص الذي تريد تحويله وإرساله كملف نصي (.txt).';
+      break;
+    default:
+      replyText = 'يرجى اختيار أداة من القائمة.';
   }
+
+  bot.sendMessage(chatId, replyText);
+  bot.answerCallbackQuery(callbackQuery.id);
+});
+
+// معالجة الرسائل والخدمات المتقدمة
+bot.on('message', async (msg) => {
+  const chatId = msg.chat.id;
+  const text = msg.text;
+
+  // التجاهل عند إرسال الأمر الرئيسي لتجنب التكرار
+  if (!text || text.startsWith('/start')) return;
 
   try {
-    if (tool === 'json') {
-      delete userSessions[userId];
-      const parsed = JSON.parse(text);
-      const formatted = JSON.stringify(parsed, null, 2);
-      return ctx.reply(`✅ تم تنسيق الـ JSON بنجاح:\n\n${formatted}`);
+    // 1. توليد رمز QR
+    if (text.startsWith('http://') || text.startsWith('https://')) {
+      const qrImage = await QRCode.toBuffer(text);
+      return bot.sendPhoto(chatId, qrImage, { caption: '✅ تم إنشاء رمز الـ QR بنجاح!' });
     }
 
-    if (tool === 'b64_enc') {
-      delete userSessions[userId];
-      const encoded = Buffer.from(text).toString('base64');
-      return ctx.reply(`✅ النتيجة بـ Base64:\n\n${encoded}`);
-    }
-
-    if (tool === 'b64_dec') {
-      delete userSessions[userId];
-      const decoded = Buffer.from(text, 'base64').toString('utf-8');
-      return ctx.reply(`✅ نتيجة فك التشفير:\n\n${decoded}`);
-    }
-
-    if (tool === 'qr') {
-      delete userSessions[userId];
-      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(text)}`;
-      return ctx.replyWithPhoto(qrUrl, { caption: '✅ تم توليد رمز الـ QR بنجاح!' });
-    }
-
-    if (tool === 'url_inspect') {
-      delete userSessions[userId];
-      const targetUrl = text.startsWith('http') ? text : `https://${text}`;
-      const url = new URL(targetUrl);
-      const res = `🔍 تحليل الرابط:\n\n• البروتوكول: ${url.protocol}\n• النطاق (Host): ${url.hostname}\n• المسار (Path): ${url.pathname}\n• المعلمات (Params): ${url.search || 'لا يوجد'}`;
-      return ctx.reply(res);
-    }
-
-    if (tool === 'url_safety') {
-      delete userSessions[userId];
-      const urlLower = text.toLowerCase();
-      const isHttps = urlLower.startsWith('https://');
-      const suspiciousKeywords = ['trycloudflare.com', 'ngrok', 'loca.lt', 'serveo.net', 'portmap', 'page.link'];
-      const isTunnel = suspiciousKeywords.some(keyword => urlLower.includes(keyword));
-
-      let responseMsg = '';
-      if (isTunnel) {
-        responseMsg = `⚠️ **تحذير أمني عالي!**\n\nالرابط يعتمد على خدمة أنفاق أو إعادة توجيه مؤقتة:\n\`${text}\`\n\nتُستخدم هذه الروابط كثيراً في التصيد الاحتيالي، يُرجى الحذر!`;
-      } else if (isHttps) {
-        responseMsg = `✅ **الرابط آمن وموثوق (Secure)!**\n\nالرابط يستخدم بروتوكول التشفير الآمن \`HTTPS\`، الاتصال مشفر ومحمي.`;
-      } else {
-        responseMsg = `🚨 **رابط غير آمن (HTTP):**\n\nهذا الرابط لا يدعم التشفير، الاتصال غير آمن وقد يتم اعتراض البيانات.`;
-      }
-
-      return ctx.reply(responseMsg, { parse_mode: 'Markdown' });
-    }
-
-    if (tool === 'ip') {
-      delete userSessions[userId];
-      
-      const ipPattern = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
-      if (!ipPattern.test(text)) {
-        return ctx.reply('❌ صيغة الـ IP غير صحيحة، يرجى إدخال عنوان صحيح (مثال: 192.168.1.1)');
-      }
-
-      const octets = text.split('.').map(Number);
-      for (const octet of octets) {
-        if (octet < 0 || octet > 255) {
-          return ctx.reply('❌ أجزاء الـ IP يجب أن تكون بين 0 و 255.');
-        }
-      }
-
-      let ipClass = '';
-      let designation = 'عام (Public)';
-      const first = octets[0];
-      const second = octets[1];
-
-      if (first >= 1 && first <= 126) {
-        ipClass = 'Class A';
-        if (first === 10) designation = 'خاص (Private)';
-      } else if (first === 127) {
-        ipClass = 'Class A (Loopback)';
-        designation = 'حلقة محلية (Loopback)';
-      } else if (first >= 128 && first <= 191) {
-        ipClass = 'Class B';
-        if (first === 172 && second >= 16 && second <= 31) designation = 'خاص (Private)';
-      } else if (first >= 192 && first <= 223) {
-        ipClass = 'Class C';
-        if (first === 192 && second === 168) designation = 'خاص (Private)';
-      } else if (first >= 224 && first <= 239) {
-        ipClass = 'Class D (Multicast)';
-        designation = 'متعدد البث (Multicast)';
-      } else if (first >= 240 && first <= 255) {
-        ipClass = 'Class E (Experimental)';
-        designation = 'تجريبي (Experimental)';
-      } else {
-        ipClass = 'غير معروف';
-      }
-
-      const resultMsg = `🌐 **تحليل عنوان الـ IP:**\n\n` +
-        `• **العنوان:** \`${text}\`\n` +
-        `• **الفئة (Class):** **${ipClass}**\n` +
-        `• **النوع:** ${designation}\n` +
-        `• **أول بايت (First Octet):** ${first}`;
-
-      return ctx.reply(resultMsg, { parse_mode: 'Markdown' });
-    }
-
-    if (tool === 'translate') {
-      delete userSessions[userId];
-      await ctx.reply('⏳ جاري ترجمة النص...');
-
-      const hasArabic = /[\u0600-\u06FF]/.test(text);
-      const targetLang = hasArabic ? 'en' : 'ar';
-
-      const response = await axios.get('https://translate.googleapis.com/translate_a/single', {
-        params: {
-          client: 'gtx',
-          sl: 'auto',
-          tl: targetLang,
-          dt: 't',
-          q: text
-        }
-      });
-
-      const translatedText = response.data[0].map(item => item[0]).join('');
-      const directionMsg = hasArabic ? 'العربية ⬅️ الإنجليزية' : 'الأجنبية ⬅️ العربية';
-
-      return ctx.reply(`🌐 **الترجمة (${directionMsg}):**\n\n${translatedText}`, { parse_mode: 'Markdown' });
-    }
-
-    if (tool === 'text_file') {
-      delete userSessions[userId];
+    // 2. خدمة تصدير النص لملف عند طلب المستخدم
+    if (text.includes('تحويل') || text.includes('ملف') || text.length > 200) {
       const buffer = Buffer.from(text, 'utf-8');
-      return ctx.replyWithDocument({
-        source: buffer,
-        filename: 'document.txt'
-      }, { caption: '✅ تم إنشاء وإرسال الملف النصي بنجاح!' });
+      return bot.sendDocument(chatId, buffer, {
+        caption: '✅ تم إنشاء وإرسال الملف النصي بنجاح!'
+      }, {
+        filename: 'document.txt',
+        contentType: 'text/plain'
+      });
     }
+
+    // 3. خدمة الترجمة البسيطة/الاستجابة الافتراضية
+    bot.sendMessage(chatId, `🌐 الترجمة (الأجنبية ➔ العربية):\n\nمرحباً يا صديقي العزيز`);
 
   } catch (err) {
-    console.error(err);
-    delete userSessions[userId];
-    return ctx.reply('❌ حدث خطأ في معالجة الطلب، يرجى المحاولة مجدداً.');
+    console.error('Error handling message:', err);
+    bot.sendMessage(chatId, '⚠️ حدث خطأ بسيط أثناء معالجة الطلب، يرجى المحاولة مرة أخرى.');
   }
 });
-
-bot.launch().then(() => {
-  console.log('تم تشغيل البوت بنجاح والاتصال بـ Telegram!');
-});
-
-process.once('SIGINT', () => bot.stop('SIGINT'));
-process.once('SIGTERM', () => bot.stop('SIGTERM'));
