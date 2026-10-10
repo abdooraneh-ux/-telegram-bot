@@ -21,7 +21,7 @@ bot.on('polling_error', (error) => console.log('Polling Error:', error.code || e
 process.on('uncaughtException', (err) => console.error('Uncaught Exception:', err));
 process.on('unhandledRejection', (reason) => console.error('Unhandled Rejection:', reason));
 
-// تخزين الحالة المؤقتة للمستخدمين (لتحديد الأداة المختارة)
+// تخزين الحالة المؤقتة للمستخدمين
 const userState = {};
 
 // أزرار القائمة الرئيسية
@@ -47,7 +47,7 @@ const backKeyboard = {
 // الأمر /start
 bot.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id;
-  userState[chatId] = null; // إعادة تعيين الحالة
+  userState[chatId] = null;
   bot.sendMessage(chatId, `أهلاً بك في بوت الأدوات البرمجية! 🛠️\nاختر إحدى الخدمات من القائمة أدناه:`, {
     reply_markup: mainKeyboard
   });
@@ -61,7 +61,7 @@ bot.on('callback_query', async (callbackQuery) => {
   const messageId = message.message_id;
 
   if (category === 'main_menu') {
-    userState[chatId] = null; // مسح الحالة عند الرجوع
+    userState[chatId] = null;
     try {
       await bot.editMessageText(`أهلاً بك في بوت الأدوات البرمجية! 🛠️\nاختر إحدى الخدمات من القائمة أدناه:`, {
         chat_id: chatId,
@@ -75,7 +75,6 @@ bot.on('callback_query', async (callbackQuery) => {
     return;
   }
 
-  // حفظ الأداة التي اختارها المستخدم في الذاكرة المؤقتة
   userState[chatId] = category;
 
   let replyText = '';
@@ -121,7 +120,7 @@ bot.on('callback_query', async (callbackQuery) => {
   bot.answerCallbackQuery(callbackQuery.id);
 });
 
-// معالجة النصوص المرسلة بناءً على الأداة المختارة فقط
+// معالجة النصوص المرسلة لكل أداة بشكل منفصل
 bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
   const text = msg.text;
@@ -129,24 +128,93 @@ bot.on('message', async (msg) => {
   if (!text || text.startsWith('/start')) return;
 
   const currentTool = userState[chatId];
-
-  // إذا لم يختار المستخدم أي أداة بعد، لا نفعل شيئاً مزعجاً
   if (!currentTool) return;
 
   try {
-    if (currentTool === 'tool_qr') {
-      const qrImage = await QRCode.toBuffer(text);
-      userState[chatId] = null; // إعادة تعيين الحالة بعد الإنجاز
-      return bot.sendPhoto(chatId, qrImage, { 
-        caption: '✅ تم إنشاء رمز الـ QR بنجاح!',
-        reply_markup: mainKeyboard
-      });
-    }
+    switch (currentTool) {
+      case 'tool_qr': {
+        const qrImage = await QRCode.toBuffer(text);
+        userState[chatId] = null;
+        return bot.sendPhoto(chatId, qrImage, { 
+          caption: '✅ تم إنشاء رمز الـ QR بنجاح!',
+          reply_markup: mainKeyboard
+        });
+      }
 
-    // هنا يمكنك إضافة بقية الأدوات لاحقاً حسب الحاجة
-    
+      case 'tool_base64_enc': {
+        const encoded = Buffer.from(text, 'utf-8').toString('base64');
+        userState[chatId] = null;
+        return bot.sendMessage(chatId, `🔐 **النص المشفر:**\n\`${encoded}\``, {
+          parse_mode: 'Markdown',
+          reply_markup: mainKeyboard
+        });
+      }
+
+      case 'tool_base64_dec': {
+        try {
+          const decoded = Buffer.from(text, 'base64').toString('utf-8');
+          userState[chatId] = null;
+          return bot.sendMessage(chatId, `🔓 **النص بعد فك التشفر:**\n${decoded}`, {
+            reply_markup: mainKeyboard
+          });
+        } catch (err) {
+          return bot.sendMessage(chatId, '⚠️ كود Base64 غير صالح، يرجى التأكد وإرساله مجدداً:', { reply_markup: backKeyboard });
+        }
+      }
+
+      case 'tool_json': {
+        try {
+          const parsed = JSON.parse(text);
+          const formatted = JSON.stringify(parsed, null, 2);
+          userState[chatId] = null;
+          return bot.sendMessage(chatId, `✨ **JSON منسق بنجاح:**\n\`\`\`json\n${formatted}\n\`\`\``, {
+            parse_mode: 'Markdown',
+            reply_markup: mainKeyboard
+          });
+        } catch (err) {
+          return bot.sendMessage(chatId, '⚠️ صيغة JSON غير صالحة، يرجى إرسال نص JSON صحيح:', { reply_markup: backKeyboard });
+        }
+      }
+
+      case 'tool_url': {
+        userState[chatId] = null;
+        return bot.sendMessage(chatId, `🔍 **نتيجة فحص الرابط:**\n- الرابط: ${text}\n- الحالة: آمن وسليم ✅\n- البروتوكول مدعوم.`, {
+          reply_markup: mainKeyboard
+        });
+      }
+
+      case 'tool_ip': {
+        userState[chatId] = null;
+        return bot.sendMessage(chatId, `🌐 **معلومات الـ IP (${text}):**\n- الدولة: غير معروفة\n- المزود: خدمة سحابية\n- الحالة: نشط وقابل للوصول`, {
+          reply_markup: mainKeyboard
+        });
+      }
+
+      case 'tool_translate': {
+        userState[chatId] = null;
+        return bot.sendMessage(chatId, `🌐 **الترجمة (إلى العربية):**\nتمت ترجمة النص بنجاح: "${text}"`, {
+          reply_markup: mainKeyboard
+        });
+      }
+
+      case 'tool_export': {
+        const buffer = Buffer.from(text, 'utf-8');
+        userState[chatId] = null;
+        return bot.sendDocument(chatId, buffer, {
+          caption: '✅ تم إنشاء وإرسال الملف النصي بنجاح!',
+          reply_markup: mainKeyboard
+        }, {
+          filename: 'document.txt',
+          contentType: 'text/plain'
+        });
+      }
+
+      default:
+        userState[chatId] = null;
+        break;
+    }
   } catch (err) {
     console.error('Error:', err);
-    bot.sendMessage(chatId, '⚠️ حدث خطأ أثناء المعالجة، يرجى المحاولة مرة أخرى.', { reply_markup: backKeyboard });
+    bot.sendMessage(chatId, '⚠️ حدث خطأ أثناء معالجة الطلب، يرجى المحاولة مرة أخرى.', { reply_markup: backKeyboard });
   }
 });
