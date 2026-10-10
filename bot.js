@@ -1,11 +1,10 @@
 const { Telegraf, Markup } = require('telegraf');
-const PDFDocument = require('pdfkit');
 const axios = require('axios');
 
 const bot = new Telegraf('8399272057:AAFFdGHrbMmdb3UiMWboNtTSfNlV_QyqcHw');
 const userSessions = {};
 
-// 1. كيبورد الهاتف السفلي الثابت (يحتوي فقط على زر start)
+// 1. كيبورد الهاتف السفلي (زر القائمة الرئيسية فقط)
 const replyKeyboard = Markup.keyboard([
   ['🏠 القائمة الرئيسية (/start)']
 ]).resize();
@@ -29,12 +28,10 @@ const mainInlineKeyboard = Markup.inlineKeyboard([
     Markup.button.callback('📝 نص إلى PDF', 'tool_text_to_pdf')
   ],
   [
-    Markup.button.callback('🖼️ صورة إلى PDF', 'tool_img_to_pdf'),
     Markup.button.callback('❌ إلغاء العملية الحالية', 'cancel_action')
   ]
 ]);
 
-// دالة إرسال القائمة الرئيسية
 function sendMainMenu(ctx, messageText) {
   const name = ctx.from ? ctx.from.first_name || 'عبدو' : 'عبدو';
   const text = messageText || `أهلاً بك يا ${name} 💻 اختر الأداة التي تريد استخدامها:`;
@@ -43,32 +40,30 @@ function sendMainMenu(ctx, messageText) {
   });
 }
 
-// أمر البدء /start
 bot.start((ctx) => {
   delete userSessions[ctx.from.id];
   return sendMainMenu(ctx);
 });
 
-// التعامل مع زر القائمة الرئيسية
 bot.hears('🏠 القائمة الرئيسية (/start)', (ctx) => {
   delete userSessions[ctx.from.id];
   return sendMainMenu(ctx, 'تمت العودة للقائمة الرئيسية.');
 });
 
-// ❌ التعامل مع زر إلغاء العملية الحالية (دون إعادة إرسال قائمة الأدوات)
+// ❌ إلغاء العملية الحالية دون إعادة إرسال قائمة الأدوات
 bot.action('cancel_action', (ctx) => {
   const hadActiveSession = !!userSessions[ctx.from.id];
   delete userSessions[ctx.from.id];
   ctx.answerCbQuery('تم الإلغاء');
 
   if (hadActiveSession) {
-    return ctx.reply('🛑 تم إلغاء العملية الحالية بنجاح. يمكنك اختيار أداة أخرى من القائمة أعلاه.');
+    return ctx.reply('🛑 تم إلغاء العملية الحالية بنجاح.');
   } else {
     return ctx.reply('ℹ️ لا توجد أية عملية معلقة لإلغائها حالياً.');
   }
 });
 
-// ----------------- خيارات الأدوات -----------------
+// ---------------- الخيارات والأدوات ----------------
 
 bot.action('tool_json', (ctx) => {
   userSessions[ctx.from.id] = 'json';
@@ -137,58 +132,7 @@ bot.action('tool_text_to_pdf', (ctx) => {
   return ctx.reply('📝 أداة تحويل النص إلى PDF:\nأرسل النص الذي تريد تحويله إلى مستند PDF.');
 });
 
-bot.action('tool_img_to_pdf', (ctx) => {
-  userSessions[ctx.from.id] = 'img_to_pdf';
-  ctx.answerCbQuery();
-  return ctx.reply('🖼️ أداة تحويل الصورة إلى PDF:\nقم بإرسال الصورة الآن لتحويلها لمستند PDF جاهز.');
-});
-
-// ----------------- معالجة الصور -----------------
-
-bot.on('photo', async (ctx) => {
-  const userId = ctx.from.id;
-  const tool = userSessions[userId];
-
-  if (tool === 'img_to_pdf') {
-    delete userSessions[userId];
-    await ctx.reply('⏳ جاري تحويل الصورة إلى مستند PDF...');
-
-    try {
-      const photos = ctx.message.photo;
-      const fileId = photos[photos.length - 1].file_id;
-      const fileLink = await ctx.telegram.getFileLink(fileId);
-
-      const response = await axios.get(fileLink.href, { responseType: 'arraybuffer' });
-      const imgBuffer = Buffer.from(response.data, 'binary');
-
-      const doc = new PDFDocument({ margin: 20 });
-      const buffers = [];
-      doc.on('data', buffers.push.bind(buffers));
-      doc.on('end', async () => {
-        const pdfData = Buffer.concat(buffers);
-        await ctx.replyWithDocument({
-          source: pdfData,
-          filename: 'converted_image.pdf'
-        }, { caption: '✅ تم تحويل الصورة إلى ملف PDF بنجاح!' });
-      });
-
-      doc.image(imgBuffer, {
-        fit: [500, 700],
-        align: 'center',
-        valign: 'center'
-      });
-      doc.end();
-
-    } catch (err) {
-      console.error(err);
-      ctx.reply('❌ حدث خطأ أثناء تحويل الصورة إلى PDF.');
-    }
-  } else {
-    ctx.reply('⚠️ يرجى اختيار أداة "صورة إلى PDF" أولاً قبل إرسال الصور.');
-  }
-});
-
-// ----------------- معالجة النصوص -----------------
+// ---------------- معالجة النصوص والمدخلات ----------------
 
 bot.on('text', async (ctx) => {
   const userId = ctx.from.id;
@@ -270,22 +214,14 @@ bot.on('text', async (ctx) => {
 
     if (tool === 'text_to_pdf') {
       delete userSessions[userId];
-      await ctx.reply('⏳ جاري تحويل النص إلى مستند PDF...');
+      await ctx.reply('⏳ جاري إنشاء مستند الـ PDF...');
+      const encodedText = encodeURIComponent(text);
+      const pdfApiUrl = `https://api.html2pdf.app/v1/generate?html=<p>${encodedText}</p>&apiKey=public`;
       
-      const doc = new PDFDocument({ margin: 50 });
-      const buffers = [];
-      doc.on('data', buffers.push.bind(buffers));
-      doc.on('end', async () => {
-        const pdfData = Buffer.concat(buffers);
-        await ctx.replyWithDocument({
-          source: pdfData,
-          filename: 'text_document.pdf'
-        }, { caption: '✅ تم إنشاء ملف الـ PDF بنجاح!' });
-      });
-
-      doc.fontSize(14).text(text, { align: 'left' });
-      doc.end();
-      return;
+      return ctx.replyWithDocument({
+        url: pdfApiUrl,
+        filename: 'document.pdf'
+      }, { caption: '✅ تم إنشاء المستند بنجاح!' });
     }
 
   } catch (err) {
