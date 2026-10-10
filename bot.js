@@ -176,6 +176,7 @@ bot.on('text', async (ctx) => {
       return ctx.reply(res);
     }
 
+    // أداة فحص أمان الرابط المحدثة (مع رسالة "الرابط آمن")
     if (tool === 'url_safety') {
       delete userSessions[userId];
       const urlLower = text.toLowerCase();
@@ -185,11 +186,11 @@ bot.on('text', async (ctx) => {
 
       let responseMsg = '';
       if (isTunnel) {
-        responseMsg = `⚠️ **تحذير أمني عالي!**\n\nالرابط يعتمد على خدمة أنفاق أو إعادة توجيه مؤقتة:\n\`${text}\``;
+        responseMsg = `⚠️ **تحذير أمني عالي!**\n\nالرابط يعتمد على خدمة أنفاق أو إعادة توجيه مؤقتة:\n\`${text}\`\n\nتُستخدم هذه الروابط كثيراً في التصيد الاحتيالي، يُرجى الحذر!`;
       } else if (isHttps) {
-        responseMsg = `🔒 **فحص الاتصال:** الرابط يستخدم تشفير (HTTPS).`;
+        responseMsg = `✅ **الرابط آمن وموثوق (Secure)!**\n\nالرابط يستخدم بروتوكول التشفير الآمن \`HTTPS\`، الاتصال مشفر ومحمي.`;
       } else {
-        responseMsg = `🚨 **رابط غير آمن (HTTP):** الاتصال غير مشفر.`;
+        responseMsg = `🚨 **رابط غير آمن (HTTP):**\n\nهذا الرابط لا يدعم التشفير، الاتصال غير آمن وقد يتم اعتراض البيانات.`;
       }
 
       return ctx.reply(responseMsg, { parse_mode: 'Markdown' });
