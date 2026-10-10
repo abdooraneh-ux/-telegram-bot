@@ -1,8 +1,20 @@
 const { Telegraf, Markup } = require('telegraf');
 const axios = require('axios');
+const http = require('http');
 
 const bot = new Telegraf('8399272057:AAFFdGHrbMmdb3UiMWboNtTSfNlV_QyqcHw');
 const userSessions = {};
+
+// فتح سيرفر ويب بسيط لترضية منصة Render ومنع انهياره
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('Bot is running!\n');
+});
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`Server is listening on port ${PORT}`);
+});
 
 // 1. كيبورد الهاتف السفلي (زر القائمة الرئيسية فقط)
 const replyKeyboard = Markup.keyboard([
@@ -176,7 +188,6 @@ bot.on('text', async (ctx) => {
       return ctx.reply(res);
     }
 
-    // أداة فحص أمان الرابط المحدثة (مع رسالة "الرابط آمن")
     if (tool === 'url_safety') {
       delete userSessions[userId];
       const urlLower = text.toLowerCase();
@@ -287,7 +298,7 @@ bot.on('text', async (ctx) => {
 });
 
 bot.launch().then(() => {
-  console.log('تم تشغيل البوت بنجاح!');
+  console.log('تم تشغيل البوت بنجاح والاتصال بـ Telegram!');
 });
 
 process.once('SIGINT', () => bot.stop('SIGINT'));
