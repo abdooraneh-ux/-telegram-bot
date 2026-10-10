@@ -123,7 +123,7 @@ bot.action('tool_ip', (ctx) => {
 bot.action('tool_translate', (ctx) => {
   userSessions[ctx.from.id] = 'translate';
   ctx.answerCbQuery();
-  return ctx.reply('🌐 أداة الترجمة الفورية:\nأرسل أي نص بلغة أجنبية للترجمة إلى العربية، أو بالعربية للترجمة إلى الإنجليزية.');
+  return ctx.reply('🌐 أداة الترجمة الفورية الذكية:\nأرسل أي نص بلغة أجنبية للترجمة إلى العربية، أو بالعربية للترجمة تلقائياً إلى الإنجليزية.');
 });
 
 bot.action('tool_text_to_pdf', (ctx) => {
@@ -204,12 +204,22 @@ bot.on('text', async (ctx) => {
       return ctx.reply(`🌐 نتيجة فحص العنوان (${text}):\nالعنوان جاهز للاستخدام ومقبول.`);
     }
 
+    // 🌐 أداة الترجمة الفورية المحدثة التلقائية الاتجاه
     if (tool === 'translate') {
       delete userSessions[userId];
       await ctx.reply('⏳ جاري ترجمة النص...');
-      const res = await axios.get(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=ar&dt=t&q=${encodeURIComponent(text)}`);
+
+      const hasArabic = /[\u0600-\u06FF]/.test(text);
+      const targetLang = hasArabic ? 'en' : 'ar';
+
+      const res = await axios.get(
+        `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${targetLang}&dt=t&q=${encodeURIComponent(text)}`
+      );
+
       const translatedText = res.data[0].map(item => item[0]).join('');
-      return ctx.reply(`🌐 **الترجمة:**\n\n${translatedText}`, { parse_mode: 'Markdown' });
+      const directionMsg = hasArabic ? 'العربية ⬅️ الإنجليزية' : 'الأجنبية ⬅️ العربية';
+
+      return ctx.reply(`🌐 **الترجمة (${directionMsg}):**\n\n${translatedText}`, { parse_mode: 'Markdown' });
     }
 
     if (tool === 'text_to_pdf') {
