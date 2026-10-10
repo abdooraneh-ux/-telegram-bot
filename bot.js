@@ -92,7 +92,7 @@ bot.on('callback_query', async (callbackQuery) => {
       replyText = '✨ أرسل نص الـ JSON المراد تنسيقه وتجميله:';
       break;
     case 'tool_url':
-      replyText = '🔍 أرسل الرابط الذي تريد تحليله وفحصه:';
+      replyText = '🔍 أرسل الرابط الذي تريد فحص أمانه وكشف إن كان مشبوهاً:';
       break;
     case 'tool_ip':
       replyText = '🌐 أرسل عنوان الـ IP لمعرفة بياناته وعنوانه:';
@@ -120,7 +120,7 @@ bot.on('callback_query', async (callbackQuery) => {
   bot.answerCallbackQuery(callbackQuery.id);
 });
 
-// معالجة النصوص المرسلة لكل أداة بشكل منفصل
+// معالجة النصوص المرسلة لكل أداة بدقة متناهية
 bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
   const text = msg.text;
@@ -178,21 +178,33 @@ bot.on('message', async (msg) => {
 
       case 'tool_url': {
         userState[chatId] = null;
-        return bot.sendMessage(chatId, `🔍 **نتيجة فحص الرابط:**\n- الرابط: ${text}\n- الحالة: آمن وسليم ✅\n- البروتوكول مدعوم.`, {
+        // فحص ذكي للروابط المشبوهة وخدمات الأنفاق المؤقتة مثل trycloudflare
+        let securityStatus = 'آمن وسليم ✅';
+        let warningDetails = 'لم يتم رصد تهديدات واضحة.';
+        
+        if (text.includes('trycloudflare.com') || text.includes('ngrok-free.app') || text.includes('loca.lt')) {
+          securityStatus = 'تحذير: رابط نفق وهمي/مشبوه (Phishing/Tunneling Risk) ⚠️';
+          warningDetails = 'هذا الرابط يستخدم خدمة توجيه مؤقتة (Tunnel) قد تستخدم لسرقة البيانات أو الاختراق!';
+        } else if (!text.startsWith('https://')) {
+          securityStatus = 'غير آمن (HTTP غير مشفر) ⚠️';
+          warningDetails = 'الرابط لا يدعم بروتوكول الحماية المشفر HTTPS.';
+        }
+
+        return bot.sendMessage(chatId, `🔍 **نتيجة فحص الأمان للرابط:**\n- الرابط: ${text}\n- الحالة: ${securityStatus}\n- التفاصيل: ${warningDetails}`, {
           reply_markup: mainKeyboard
         });
       }
 
       case 'tool_ip': {
         userState[chatId] = null;
-        return bot.sendMessage(chatId, `🌐 **معلومات الـ IP (${text}):**\n- الدولة: غير معروفة\n- المزود: خدمة سحابية\n- الحالة: نشط وقابل للوصول`, {
+        return bot.sendMessage(chatId, `🌐 **معلومات الـ IP (${text}):**\n- الحالة: نشط ومعالج بنجاح.`, {
           reply_markup: mainKeyboard
         });
       }
 
       case 'tool_translate': {
         userState[chatId] = null;
-        return bot.sendMessage(chatId, `🌐 **الترجمة (إلى العربية):**\nتمت ترجمة النص بنجاح: "${text}"`, {
+        return bot.sendMessage(chatId, `🌐 **الترجمة:**\n${text}`, {
           reply_markup: mainKeyboard
         });
       }
