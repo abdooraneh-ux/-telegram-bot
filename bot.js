@@ -1,4 +1,6 @@
 const { Telegraf, Markup } = require('telegraf');
+const PDFDocument = require('pdfkit');
+const axios = require('axios');
 
 const bot = new Telegraf('8399272057:AAFFdGHrbMmdb3UiMWboNtTSfNlV_QyqcHw');
 const userSessions = {};
@@ -8,7 +10,7 @@ const replyKeyboard = Markup.keyboard([
   ['🏠 القائمة الرئيسية (/start)', '❌ إلغاء']
 ]).resize();
 
-// أزرار الأدوات الشفافة
+// أزرار الأدوات الشفافة الشاملة
 const mainInlineKeyboard = Markup.inlineKeyboard([
   [
     Markup.button.callback('📦 تنسيق JSON', 'tool_json'),
@@ -23,6 +25,11 @@ const mainInlineKeyboard = Markup.inlineKeyboard([
     Markup.button.callback('🌐 فحص IP', 'tool_ip')
   ],
   [
+    Markup.button.callback('🌐 ترجمة فورية', 'tool_translate'),
+    Markup.button.callback('📝 نص إلى PDF', 'tool_text_to_pdf')
+  ],
+  [
+    Markup.button.callback('🖼️ صورة إلى PDF', 'tool_img_to_pdf'),
     Markup.button.callback('❌ إلغاء العملية الحالية', 'cancel_action')
   ]
 ]);
@@ -55,6 +62,8 @@ bot.action('cancel_action', (ctx) => {
   ctx.answerCbQuery('تم الإلغاء');
   return sendMainMenu(ctx, 'تم إلغاء العملية ورجوع للقائمة الرئيسية.');
 });
+
+// ---------- تسجيل الأحداث الخاصة بالأدوات ----------
 
 bot.action('tool_json', (ctx) => {
   userSessions[ctx.from.id] = 'json';
@@ -90,7 +99,7 @@ bot.action('b64_dec', (ctx) => {
 bot.action('tool_url_safety', (ctx) => {
   userSessions[ctx.from.id] = 'url_safety';
   ctx.answerCbQuery();
-  return ctx.reply('🔗 أداة فحص أمان الرابط:\nأرسل الرابط المراد تفحصه.');
+  return ctx.reply('🔗 أداة فحص أمان الرابط الذكية:\nأرسل الرابط المراد تفحصه واختبار مدى أمانه.');
 });
 
 bot.action('tool_url_inspect', (ctx) => {
@@ -110,6 +119,76 @@ bot.action('tool_ip', (ctx) => {
   ctx.answerCbQuery();
   return ctx.reply('🌐 أداة فحص IP:\nأرسل عنوان الـ IP المطلوب تفحصه (مثل: 8.8.8.8).');
 });
+
+bot.action('tool_translate', (ctx) => {
+  userSessions[ctx.from.id] = 'translate';
+  ctx.answerCbQuery();
+  return ctx.reply('🌐 أداة الترجمة الفورية:\nأرسل أي نص بلغة أجنبية للترجمة إلى العربية، أو باللغة العربية للترجمة إلى الإنجليزية.');
+});
+
+bot.action('tool_text_to_pdf', (ctx) => {
+  userSessions[ctx.from.id] = 'text_to_pdf';
+  ctx.answerCbQuery();
+  return ctx.reply('📝 أداة تحويل النص إلى PDF:\nأرسل النص الذي تريد تحويله إلى مستند PDF.');
+});
+
+bot.action('tool_img_to_pdf', (ctx) => {
+  userSessions[ctx.from.id] = 'img_to_pdf';
+  ctx.answerCbQuery();
+  return ctx.reply('🖼️ أداة تحويل الصورة إلى PDF:\nقم بإرسال الصورة الآن لتحويلها لمستند PDF جاهز.');
+});
+
+// ---------- معالجة استلام الصور ----------
+
+bot.on('photo', async (ctx) => {
+  const userId = ctx.from.id;
+  const tool = userSessions[userId];
+
+  if (tool === 'img_to_pdf') {
+    delete userSessions[userId];
+    await ctx.reply('⏳ جاري تحويل الصورة إلى مستند PDF...');
+
+    try {
+      // جلب أعلى دقة للصورة
+      const photos = ctx.message.photo;
+      const fileId = photos[photos.length - 1].file_id;
+      const fileLink = await ctx.telegram.getFileLink(fileId);
+
+      // تنزيل الصورة كـ Buffer
+      const response = await axios.get(fileLink.href, { responseType: 'arraybuffer' });
+      const imgBuffer = Buffer.from(response.data, 'binary');
+
+      // إنشاء مستند PDF
+      const doc = new PDFDocument({ margin: 20 });
+      const buffers = [];
+      doc.on('data', buffers.push.bind(buffers));
+      doc.on('end', async () => {
+        const pdfData = Buffer.concat(buffers);
+        await ctx.replyWithDocument({
+          source: pdfData,
+          filename: 'converted_image.pdf'
+        }, { caption: '✅ تم تحويل الصورة إلى ملف PDF بنجاح!' });
+        sendMainMenu(ctx);
+      });
+
+      doc.image(imgBuffer, {
+        fit: [500, 700],
+        align: 'center',
+        valign: 'center'
+      });
+      doc.end();
+
+    } catch (err) {
+      console.error(err);
+      ctx.reply('❌ حدث خطأ أثناء تحويل الصورة إلى PDF.');
+      sendMainMenu(ctx);
+    }
+  } else {
+    ctx.reply('⚠️ يرجى اختيار أداة "صورة إلى PDF" أولاً قبل إرسال الصور.');
+  }
+});
+
+// ---------- معالجة النصوص والمدخلات ----------
 
 bot.on('text', async (ctx) => {
   const userId = ctx.from.id;
@@ -158,11 +237,22 @@ bot.on('text', async (ctx) => {
 
     if (tool === 'url_safety') {
       delete userSessions[userId];
-      const isHttps = text.toLowerCase().startsWith('https://');
-      const msg = isHttps 
-        ? '✅ الرابط يستعمل بروتوكول مشفر وآمن (HTTPS).' 
-        : '⚠️ الرابط ينتهي بـ HTTP غير مشفر أو يحتاج لحذر.';
-      return ctx.reply(msg).then(() => sendMainMenu(ctx));
+      const urlLower = text.toLowerCase();
+      const isHttps = urlLower.startsWith('https://');
+      const suspiciousKeywords = ['trycloudflare.com', 'ngrok', 'loca.lt', 'serveo.net', 'portmap', 'page.link'];
+      const isTunnel = suspiciousKeywords.some(keyword => urlLower.includes(keyword));
+
+      let responseMsg = '';
+
+      if (isTunnel) {
+        responseMsg = `⚠️ **تحذير أمني عالي!**\n\nالرابط يعتمد على خدمة أنفاق أو إعادة توجيه مؤقتة:\n\`${text}\`\n\nتُستخدم هذه الروابط كثيراً في اختبارات الاختراق والتصيد الاحتيالي، يُرجى الحذر وعدم فتح الرابط أو إدخال أي بيانات فيه!`;
+      } else if (isHttps) {
+        responseMsg = `🔒 **فحص الاتصال:**\n\nالرابط يتيح التشفير (HTTPS).\n💡 *ملاحظة:* التشفير يحمي البيانات أثناء النقل ولكن يجب دائماً التثبت من هوية الموقع.`;
+      } else {
+        responseMsg = `🚨 **رابط غير آمن (HTTP):**\n\nهذا الرابط لا يمتلك شهادة تشفير، الاتصال به غير آمن.`;
+      }
+
+      return ctx.reply(responseMsg, { parse_mode: 'Markdown' }).then(() => sendMainMenu(ctx));
     }
 
     if (tool === 'ip') {
@@ -170,9 +260,41 @@ bot.on('text', async (ctx) => {
       return ctx.reply(`🌐 نتيجة فحص العنوان (${text}):\nالعنوان جاهز للاستخدام ومقبول.`).then(() => sendMainMenu(ctx));
     }
 
+    // 🌐 أداة الترجمة الفورية
+    if (tool === 'translate') {
+      delete userSessions[userId];
+      await ctx.reply('⏳ جاري ترجمة النص...');
+      const res = await axios.get(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=ar&dt=t&q=${encodeURIComponent(text)}`);
+      const translatedText = res.data[0].map(item => item[0]).join('');
+      return ctx.reply(`🌐 **الترجمة:**\n\n${translatedText}`, { parse_mode: 'Markdown' }).then(() => sendMainMenu(ctx));
+    }
+
+    // 📝 أداة تحويل النص إلى PDF
+    if (tool === 'text_to_pdf') {
+      delete userSessions[userId];
+      await ctx.reply('⏳ جاري تحويل النص إلى مستند PDF...');
+      
+      const doc = new PDFDocument({ margin: 50 });
+      const buffers = [];
+      doc.on('data', buffers.push.bind(buffers));
+      doc.on('end', async () => {
+        const pdfData = Buffer.concat(buffers);
+        await ctx.replyWithDocument({
+          source: pdfData,
+          filename: 'text_document.pdf'
+        }, { caption: '✅ تم إنشاء ملف الـ PDF بنجاح!' });
+        sendMainMenu(ctx);
+      });
+
+      doc.fontSize(14).text(text, { align: 'left' });
+      doc.end();
+      return;
+    }
+
   } catch (err) {
+    console.error(err);
     delete userSessions[userId];
-    return ctx.reply('❌ حدث خطأ في معالجة النص، يرجى التأكد من صحة المدخلات والتجربة مجدداً.').then(() => sendMainMenu(ctx));
+    return ctx.reply('❌ حدث خطأ في معالجة الطلب، يرجى التأكد من المدخلات والمحاولة مجدداً.').then(() => sendMainMenu(ctx));
   }
 });
 
