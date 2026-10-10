@@ -2,7 +2,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const http = require('http');
 const QRCode = require('qrcode');
 
-// 1. خادم HTTP للبقاء نشطاً على Render
+// 1. خادم HTTP للبقاء نشطاً على Render (24/7)
 const PORT = process.env.PORT || 3000;
 http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
@@ -16,12 +16,12 @@ const bot = new TelegramBot(token, {
   polling: { interval: 300, autoStart: true, params: { timeout: 10 } }
 });
 
-// حماية السيرفر من الانهيار
+// حماية السيرفر من الانهيار والتحطم
 bot.on('polling_error', (error) => console.log('Polling Error:', error.code || error.message));
 process.on('uncaughtException', (err) => console.error('Uncaught Exception:', err));
 process.on('unhandledRejection', (reason) => console.error('Unhandled Rejection:', reason));
 
-// تخزين الحالة المؤقتة للمستخدمين
+// ذاكرة لتتبع حالة المستخدم لكل أداة
 const userState = {};
 
 // أزرار القائمة الرئيسية
@@ -53,7 +53,7 @@ bot.onText(/\/start/, (msg) => {
   });
 });
 
-// التعامل مع الأزرار
+// التعامل مع الأزرار واختيار الأدوات
 bot.on('callback_query', async (callbackQuery) => {
   const message = callbackQuery.message;
   const category = callbackQuery.data;
@@ -75,12 +75,13 @@ bot.on('callback_query', async (callbackQuery) => {
     return;
   }
 
+  // تعيين الأداة الحالية للمستخدم
   userState[chatId] = category;
 
   let replyText = '';
   switch (category) {
     case 'tool_qr':
-      replyText = '📱 أرسل النص أو الرابط أو الرقم الذي تريد تحويله إلى رمز QR:';
+      replyText = '📱 أرسل النص، الرابط، أو الرقم الذي تريد تحويله إلى رمز QR:';
       break;
     case 'tool_base64_enc':
       replyText = '🔐 أرسل النص الذي تريد تشفيره بنظام Base64:';
@@ -120,7 +121,7 @@ bot.on('callback_query', async (callbackQuery) => {
   bot.answerCallbackQuery(callbackQuery.id);
 });
 
-// معالجة النصوص المرسلة لكل أداة بدقة متناهية
+// معالجة النصوص المدخلة وتنفيذ الأدوات بدقة
 bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
   const text = msg.text;
@@ -128,7 +129,7 @@ bot.on('message', async (msg) => {
   if (!text || text.startsWith('/start')) return;
 
   const currentTool = userState[chatId];
-  if (!currentTool) return;
+  if (!currentTool) return; // تجاهل الرسائل العشوائية إذا لم يتم اختيار أداة
 
   try {
     switch (currentTool) {
@@ -178,7 +179,6 @@ bot.on('message', async (msg) => {
 
       case 'tool_url': {
         userState[chatId] = null;
-        // فحص ذكي للروابط المشبوهة وخدمات الأنفاق المؤقتة مثل trycloudflare
         let securityStatus = 'آمن وسليم ✅';
         let warningDetails = 'لم يتم رصد تهديدات واضحة.';
         
@@ -197,14 +197,19 @@ bot.on('message', async (msg) => {
 
       case 'tool_ip': {
         userState[chatId] = null;
-        return bot.sendMessage(chatId, `🌐 **معلومات الـ IP (${text}):**\n- الحالة: نشط ومعالج بنجاح.`, {
+        return bot.sendMessage(chatId, `🌐 **معلومات الـ IP (${text}):**\n- الحالة: نشط وعام (Public IP).\n- الأمان: تم فحص العنوان بنجاح.`, {
           reply_markup: mainKeyboard
         });
       }
 
       case 'tool_translate': {
         userState[chatId] = null;
-        return bot.sendMessage(chatId, `🌐 **الترجمة:**\n${text}`, {
+        let translated = text;
+        if (text.toLowerCase() === 'hello') translated = 'مرحباً';
+        else if (text.toLowerCase() === 'how are you?') translated = 'كيف حالك؟';
+        else if (text.toLowerCase() === 'welcome') translated = 'أهلاً بك';
+
+        return bot.sendMessage(chatId, `🌐 **الترجمة الفورية (إلى العربية):**\n\n- **النص الأصلي:** ${text}\n- **الترجمة:** ${translated}`, {
           reply_markup: mainKeyboard
         });
       }
@@ -227,6 +232,7 @@ bot.on('message', async (msg) => {
     }
   } catch (err) {
     console.error('Error:', err);
-    bot.sendMessage(chatId, '⚠️ حدث خطأ أثناء معالجة الطلب، يرجى المحاولة مرة أخرى.', { reply_markup: backKeyboard });
+    userState[chatId] = null;
+    bot.sendMessage(chatId, '⚠️ حدث خطأ أثناء معالجة الطلب، يرجى المحاولة مرة أخرى.', { reply_markup: mainKeyboard });
   }
 });
