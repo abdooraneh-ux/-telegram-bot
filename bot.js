@@ -64,7 +64,6 @@ bot.on('callback_query', async (callbackQuery) => {
         reply_markup: mainKeyboard
       });
     } catch (e) {
-      // في حال كانت الرسالة قديمة أو تم حذفها، قم بإرسال قائمة جديدة
       bot.sendMessage(chatId, `أهلاً بك من جديد في القائمة الرئيسية:`, { reply_markup: mainKeyboard });
     }
     bot.answerCallbackQuery(callbackQuery.id);
@@ -74,7 +73,7 @@ bot.on('callback_query', async (callbackQuery) => {
   let replyText = '';
   switch (category) {
     case 'tool_qr':
-      replyText = '📱 أرسل النص أو الرابط الذي تريد تحويله إلى رمز QR:';
+      replyText = '📱 أرسل النص، الرابط، أو الرقم الذي تريد تحويله إلى رمز QR:';
       break;
     case 'tool_base64_enc':
       replyText = '🔐 أرسل النص الذي تريد تشفيره بنظام Base64:';
@@ -101,7 +100,6 @@ bot.on('callback_query', async (callbackQuery) => {
       replyText = 'يرجى اختيار أداة من القائمة.';
   }
 
-  // تحديث نفس رسالة القائمة لتصبح واجهة الأداة مع زر رجوع (بدون إرسال رسائل عشوائية مزعجة)
   try {
     await bot.editMessageText(replyText, {
       chat_id: chatId,
@@ -123,29 +121,15 @@ bot.on('message', async (msg) => {
   if (!text || text.startsWith('/start')) return;
 
   try {
-    // 1. توليد QR Code إذا كان رابطاً
-    if (text.startsWith('http://') || text.startsWith('https://')) {
-      const qrImage = await QRCode.toBuffer(text);
-      return bot.sendPhoto(chatId, qrImage, { 
-        caption: '✅ تم إنشاء رمز الـ QR بنجاح!',
-        reply_markup: backKeyboard
-      });
-    }
-
-    // 2. تصدير نص إلى ملف
-    if (text.length > 50 || text.includes('ملف') || text.includes('تحويل')) {
-      const buffer = Buffer.from(text, 'utf-8');
-      return bot.sendDocument(chatId, buffer, {
-        caption: '✅ تم إنشاء وإرسال الملف النصي بنجاح!'
-      }, {
-        filename: 'document.txt',
-        contentType: 'text/plain'
-      });
-    }
-
-    // تم حذف الرسالة المزعجة "أرسلت رسالة نصية..." تماماً بناءً على طلبك، ولن يتم الرد بشيء عشوائي.
+    // توليد QR Code لأي نص أو رقم يرسله المستخدم مباشرة
+    const qrImage = await QRCode.toBuffer(text);
+    return bot.sendPhoto(chatId, qrImage, { 
+      caption: '✅ تم إنشاء رمز الـ QR بنجاح!',
+      reply_markup: backKeyboard
+    });
 
   } catch (err) {
     console.error('Error:', err);
+    bot.sendMessage(chatId, '⚠️ حدث خطأ أثناء المعالجة، يرجى المحاولة مرة أخرى.', { reply_markup: backKeyboard });
   }
 });
