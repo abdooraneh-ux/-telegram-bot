@@ -16,28 +16,29 @@ const bot = new TelegramBot(token, {
   polling: { interval: 300, autoStart: true, params: { timeout: 10 } }
 });
 
-// حماية السيرفر من الانهيار والتحطم
+// حماية السيرفر من الانهيار
 bot.on('polling_error', (error) => console.log('Polling Error:', error.code || error.message));
 process.on('uncaughtException', (err) => console.error('Uncaught Exception:', err));
 process.on('unhandledRejection', (reason) => console.error('Unhandled Rejection:', reason));
 
-// ذاكرة لتتبع حالة المستخدم لكل أداة
+// ذاكرة لتتبع حالة المستخدم
 const userState = {};
 
-// أزرار القائمة الرئيسية
+// القائمة الرئيسية
 const mainKeyboard = {
   inline_keyboard: [
     [{ text: '📱 إنشاء QR Code', callback_data: 'tool_qr' }],
     [{ text: '🔐 تشفير Base64', callback_data: 'tool_base64_enc' }, { text: '🔓 فك Base64', callback_data: 'tool_base64_dec' }],
-    [{ text: '✨ تنسيق JSON', callback_data: 'tool_json' }],
+    [{ text: '🔢 تشفير أنظمة أعداد', callback_data: 'tool_num_enc' }, { text: '🔓 فك أنظمة أعداد', callback_data: 'tool_num_dec' }],
+    [{ text: '✨ تنسيق JSON ملون', callback_data: 'tool_json' }],
     [{ text: '🔍 فحص الأمان والرابط', callback_data: 'tool_url' }],
     [{ text: '🌐 تحليل الـ IP', callback_data: 'tool_ip' }],
-    [{ text: '🌐 الترجمة الفورية', callback_data: 'tool_translate' }],
+    [{ text: '🌐 الترجمة الفورية (عربي/إنجليزي)', callback_data: 'tool_translate' }],
     [{ text: '📝 تصدير نص إلى ملف', callback_data: 'tool_export' }]
   ]
 };
 
-// زر العودة للقائمة الرئيسية
+// زر العودة والإلغاء
 const backKeyboard = {
   inline_keyboard: [
     [{ text: '🔙 إلغاء / العودة للقائمة', callback_data: 'main_menu' }]
@@ -48,12 +49,12 @@ const backKeyboard = {
 bot.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id;
   userState[chatId] = null;
-  bot.sendMessage(chatId, `أهلاً بك في بوت الأدوات البرمجية! 🛠️\nاختر إحدى الخدمات من القائمة أدناه:`, {
+  bot.sendMessage(chatId, `أهلاً بك في بوت الأدوات البرمجية الشامل! 🛠️\nاختر الخدمة المطلوبة من القائمة أدناه:`, {
     reply_markup: mainKeyboard
   });
 });
 
-// التعامل مع الأزرار واختيار الأدوات
+// معالجة الضغط على الأزرار
 bot.on('callback_query', async (callbackQuery) => {
   const message = callbackQuery.message;
   const category = callbackQuery.data;
@@ -63,49 +64,54 @@ bot.on('callback_query', async (callbackQuery) => {
   if (category === 'main_menu') {
     userState[chatId] = null;
     try {
-      await bot.editMessageText(`أهلاً بك في بوت الأدوات البرمجية! 🛠️\nاختر إحدى الخدمات من القائمة أدناه:`, {
+      await bot.editMessageText(`أهلاً بك في بوت الأدوات البرمجية الشامل! 🛠️\nاختر الخدمة المطلوبة من القائمة أدناه:`, {
         chat_id: chatId,
         message_id: messageId,
         reply_markup: mainKeyboard
       });
     } catch (e) {
-      bot.sendMessage(chatId, `أهلاً بك من جديد في القائمة الرئيسية:`, { reply_markup: mainKeyboard });
+      bot.sendMessage(chatId, `القائمة الرئيسية:`, { reply_markup: mainKeyboard });
     }
     bot.answerCallbackQuery(callbackQuery.id);
     return;
   }
 
-  // تعيين الأداة الحالية للمستخدم
   userState[chatId] = category;
 
   let replyText = '';
   switch (category) {
     case 'tool_qr':
-      replyText = '📱 أرسل النص، الرابط، أو الرقم الذي تريد تحويله إلى رمز QR:';
+      replyText = '📱 أرسل النص، الرابط، أو الرقم لتحويله إلى رمز QR:';
       break;
     case 'tool_base64_enc':
-      replyText = '🔐 أرسل النص الذي تريد تشفيره بنظام Base64:';
+      replyText = '🔐 أرسل النص المراد تشفيره بنظام Base64:';
       break;
     case 'tool_base64_dec':
-      replyText = '🔓 أرسل كود Base64 الذي تريد فك تشفيره:';
+      replyText = '🔓 أرسل كود Base64 لفك تشفيره:';
+      break;
+    case 'tool_num_enc':
+      replyText = '🔢 أرسل النص المراد تشفيره بالأنظمة العددية (Binary, Octal, Decimal, Hex):';
+      break;
+    case 'tool_num_dec':
+      replyText = '🔓 أرسل القيم العددية المفصولة بمسافات لفك تشفيرها إلى نص:';
       break;
     case 'tool_json':
-      replyText = '✨ أرسل نص الـ JSON المراد تنسيقه وتجميله:';
+      replyText = '✨ أرسل نص الـ JSON لتنسيقه وتلوينه:';
       break;
     case 'tool_url':
-      replyText = '🔍 أرسل الرابط الذي تريد فحص أمانه وكشف إن كان مشبوهاً:';
+      replyText = '🔍 أرسل الرابط لفحص أمانه وكشف التهديدات:';
       break;
     case 'tool_ip':
-      replyText = '🌐 أرسل عنوان الـ IP لمعرفة بياناته وعنوانه:';
+      replyText = '🌐 أرسل عنوان الـ IP لتحليله وفحص الكلاس والبايتات:';
       break;
     case 'tool_translate':
-      replyText = '🌐 أرسل أي نص أجنبي وسأقوم بترجمته فوراً إلى العربية:';
+      replyText = '🌐 أرسل النص المراد ترجمته (سيتم اكتشاف اللغة تلقائياً والترجمة بين العربية والإنجليزي):';
       break;
     case 'tool_export':
-      replyText = '📝 أداة تصدير النصوص:\nأرسل النص الذي تريد تحويله وإرساله كملف نصي (.txt).';
+      replyText = '📝 أرسل النص المراد تصديره كملف نصي (.txt):';
       break;
     default:
-      replyText = 'يرجى اختيار أداة من القائمة.';
+      replyText = 'اختر أداة من القائمة.';
   }
 
   try {
@@ -121,7 +127,7 @@ bot.on('callback_query', async (callbackQuery) => {
   bot.answerCallbackQuery(callbackQuery.id);
 });
 
-// معالجة النصوص المدخلة وتنفيذ الأدوات بدقة تامة
+// معالجة النصوص وتنفيذ الأدوات
 bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
   const text = msg.text;
@@ -129,10 +135,11 @@ bot.on('message', async (msg) => {
   if (!text || text.startsWith('/start')) return;
 
   const currentTool = userState[chatId];
-  if (!currentTool) return; // تجاهل الرسائل العشوائية تماماً
+  if (!currentTool) return;
 
   try {
     switch (currentTool) {
+      // 1. إنشاء QR
       case 'tool_qr': {
         const qrImage = await QRCode.toBuffer(text);
         userState[chatId] = null;
@@ -142,33 +149,79 @@ bot.on('message', async (msg) => {
         });
       }
 
+      // 2. تشفير Base64
       case 'tool_base64_enc': {
         const encoded = Buffer.from(text, 'utf-8').toString('base64');
         userState[chatId] = null;
-        return bot.sendMessage(chatId, `🔐 **النص المشفر:**\n\`${encoded}\``, {
+        return bot.sendMessage(chatId, `🔐 **النص المشفر بـ Base64:**\n\`${encoded}\``, {
           parse_mode: 'Markdown',
           reply_markup: mainKeyboard
         });
       }
 
+      // 3. فك تشفير Base64
       case 'tool_base64_dec': {
         try {
           const decoded = Buffer.from(text, 'base64').toString('utf-8');
           userState[chatId] = null;
-          return bot.sendMessage(chatId, `🔓 **النص بعد فك التشفر:**\n${decoded}`, {
+          return bot.sendMessage(chatId, `🔓 **النص المفكوك:**\n${decoded}`, {
             reply_markup: mainKeyboard
           });
         } catch (err) {
-          return bot.sendMessage(chatId, '⚠️ كود Base64 غير صالح، يرجى التأكد وإرساله مجدداً:', { reply_markup: backKeyboard });
+          return bot.sendMessage(chatId, '⚠️ كود Base64 غير صالح، أعد إرساله بشكل صحيح:', { reply_markup: backKeyboard });
         }
       }
 
+      // 4. تشفير الأنظمة العددية
+      case 'tool_num_enc': {
+        const buffer = Buffer.from(text, 'utf-8');
+        const binary = Array.from(buffer).map(b => b.toString(2).padStart(8, '0')).join(' ');
+        const octal = Array.from(buffer).map(b => b.toString(8).padStart(3, '0')).join(' ');
+        const decimal = Array.from(buffer).map(b => b.toString(10)).join(' ');
+        const hex = Array.from(buffer).map(b => b.toString(16).padStart(2, '0')).join(' ');
+
+        userState[chatId] = null;
+        const resMsg = `🔢 **التشفير بالأنظمة العددية:**\n\n` +
+          `🔹 **Binary (ثنائي):**\n\`${binary}\`\n\n` +
+          `🔹 **Octal (ثماني):**\n\`${octal}\`\n\n` +
+          `🔹 **Decimal (عشري):**\n\`${decimal}\`\n\n` +
+          `🔹 **Hexadecimal (ست عشري):**\n\`${hex}\``;
+
+        return bot.sendMessage(chatId, resMsg, { parse_mode: 'Markdown', reply_markup: mainKeyboard });
+      }
+
+      // 5. فك تشفير الأنظمة العددية
+      case 'tool_num_dec': {
+        try {
+          const parts = text.trim().split(/\s+/);
+          let decoded = '';
+
+          if (parts[0].length === 8 && /^[01]+$/.test(parts[0])) {
+            decoded = Buffer.from(parts.map(p => parseInt(p, 2))).toString('utf-8');
+          } else if (/^[0-7]+$/.test(parts[0]) && parts[0].length === 3) {
+            decoded = Buffer.from(parts.map(p => parseInt(p, 8))).toString('utf-8');
+          } else if (/^[0-9a-fA-F]{2}$/.test(parts[0])) {
+            decoded = Buffer.from(parts.map(p => parseInt(p, 16))).toString('utf-8');
+          } else if (!isNaN(parts[0])) {
+            decoded = Buffer.from(parts.map(p => parseInt(p, 10))).toString('utf-8');
+          } else {
+            throw new Error('Invalid format');
+          }
+
+          userState[chatId] = null;
+          return bot.sendMessage(chatId, `🔓 **النص المفكوك:**\n${decoded}`, { reply_markup: mainKeyboard });
+        } catch (e) {
+          return bot.sendMessage(chatId, '⚠️ القيم العددية غير صالحة. يرجى إرسال قيم صحيحة مفصولة بمسافات:', { reply_markup: backKeyboard });
+        }
+      }
+
+      // 6. تنسيق JSON ملون
       case 'tool_json': {
         try {
           const parsed = JSON.parse(text);
           const formatted = JSON.stringify(parsed, null, 2);
           userState[chatId] = null;
-          return bot.sendMessage(chatId, `✨ **JSON منسق بنجاح:**\n\`\`\`json\n${formatted}\n\`\`\``, {
+          return bot.sendMessage(chatId, `✨ **JSON منسق بوضوح:**\n\`\`\`json\n${formatted}\n\`\`\``, {
             parse_mode: 'Markdown',
             reply_markup: mainKeyboard
           });
@@ -177,59 +230,97 @@ bot.on('message', async (msg) => {
         }
       }
 
+      // 7. فحص أمان الرابط
       case 'tool_url': {
         userState[chatId] = null;
-        let securityStatus = 'آمن وسليم ✅';
-        let warningDetails = 'لم يتم رصد تهديدات أو روابط احتيالية.';
-        
+        let isSafe = true;
+        let warnings = [];
+
         if (text.includes('trycloudflare.com') || text.includes('ngrok-free.app') || text.includes('loca.lt')) {
-          securityStatus = 'تحذير خطير: رابط نفق وهمي / شبكة مخفية (Tunneling/Phishing Risk) ⚠️';
-          warningDetails = 'هذا الرابط يعود لخدمة توجيه مؤقتة تستخدم غالباً في عمليات التصيد أو اختراق البيانات!';
-        } else if (!text.startsWith('https://')) {
-          securityStatus = 'غير آمن (HTTP غير مشفر) ⚠️';
-          warningDetails = 'الرابط لا يعتمد بروتوكول الحماية المشفر HTTPS.';
+          isSafe = false;
+          warnings.push('الرابط يستخدم خدمة أنفاق مؤقتة (Tunneling) وغالباً ما يُستخدم للتصيد وسرقة البيانات.');
+        }
+        if (!text.startsWith('https://')) {
+          isSafe = false;
+          warnings.push('الرابط لا يستخدم بروتوكول الحماية المشفر HTTPS.');
         }
 
-        return bot.sendMessage(chatId, `🔍 **نتيجة فحص الأمان للرابط:**\n\n- **الرابط:** ${text}\n- **الحالة:** ${securityStatus}\n- **التفاصيل:** ${warningDetails}`, {
+        const statusText = isSafe ? '✅ الرابط موثوق وآمن للاستخدام.' : '⚠️ تحذير: الرابط غير موثوق وخطر!';
+        const detailsText = warnings.length > 0 ? warnings.join('\n- ') : 'تم الفحص ولم يتم رصد تهديدات.';
+
+        return bot.sendMessage(chatId, `🔍 **نتيجة فحص الأمان:**\n\n- **الرابط:** ${text}\n- **النتيجة:** ${statusText}\n- **التفاصيل:**\n- ${detailsText}`, {
           reply_markup: mainKeyboard
         });
       }
 
+      // 8. تحليل IP (Class + Bytes)
       case 'tool_ip': {
         userState[chatId] = null;
-        return bot.sendMessage(chatId, `🌐 **معلومات الـ IP (${text}):**\n\n- **نوع العنوان:** IPv4 / Public\n- **الحالة:** نشط ويمكن الوصول إليه.\n- **ملاحظة:** تم فحص البنية وتحليل البيانات بنجاح.`, {
-          reply_markup: mainKeyboard
-        });
+        const ipParts = text.trim().split('.');
+        if (ipParts.length !== 4 || ipParts.some(p => isNaN(p) || p < 0 || p > 255)) {
+          return bot.sendMessage(chatId, '⚠️ عنوان IP غير صالح، يرجى إرسال IP صحيح مثل (192.168.1.1):', { reply_markup: backKeyboard });
+        }
+
+        const firstOctet = parseInt(ipParts[0], 10);
+        let ipClass = '';
+        let netBytes = 0;
+        let hostBytes = 0;
+
+        if (firstOctet >= 1 && firstOctet <= 126) {
+          ipClass = 'Class A';
+          netBytes = 1; // 8 bits
+          hostBytes = 3; // 24 bits
+        } else if (firstOctet >= 128 && firstOctet <= 191) {
+          ipClass = 'Class B';
+          netBytes = 2; // 16 bits
+          hostBytes = 2; // 16 bits
+        } else if (firstOctet >= 192 && firstOctet <= 223) {
+          ipClass = 'Class C';
+          netBytes = 3; // 24 bits
+          hostBytes = 1; // 8 bits
+        } else if (firstOctet >= 224 && firstOctet <= 239) {
+          ipClass = 'Class D (Multicast)';
+          netBytes = 4;
+          hostBytes = 0;
+        } else if (firstOctet >= 240 && firstOctet <= 255) {
+          ipClass = 'Class E (Experimental)';
+          netBytes = 4;
+          hostBytes = 0;
+        } else {
+          ipClass = 'Loopback / Special IP';
+        }
+
+        const resMsg = `🌐 **تحليل عنوان الـ IP (${text}):**\n\n` +
+          `- **الفئة (Class):** ${ipClass}\n` +
+          `- **بايتات الشبكة (Network Bytes):** ${netBytes} Byte (${netBytes * 8} Bits)\n` +
+          `- **بايتات المضيف (Host Bytes):** ${hostBytes} Byte (${hostBytes * 8} Bits)`;
+
+        return bot.sendMessage(chatId, resMsg, { reply_markup: mainKeyboard });
       }
 
+      // 9. الترجمة الفورية (عربي ↔ إنجليزي)
       case 'tool_translate': {
         userState[chatId] = null;
-        
-        // قاموس ترجمة مباشر ودقيق للجمل والكلمات الشائعة
-        const translations = {
-          'hello world': 'مرحباً بالعالم',
-          'hello': 'مرحباً',
-          'hi': 'أهلاً',
-          'how are you?': 'كيف حالك؟',
-          'welcome': 'أهلاً وسهلاً',
-          'good morning': 'صباح الخير',
-          'good evening': 'مساء الخير',
-          'thank you': 'شكراً لك',
-          'thanks': 'شكراً',
-          'bye': 'مع السلامة',
-          'goodbye': 'وداعاً',
-          'programming': 'برمجة',
-          'developer': 'مطور برمجيات'
-        };
+        try {
+          const isArabic = /[\u0600-\u06FF]/.test(text);
+          const targetLang = isArabic ? 'en' : 'ar';
+          
+          const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${targetLang}&dt=t&q=${encodeURIComponent(text)}`;
+          const response = await fetch(url);
+          const data = await response.json();
+          const translatedText = data[0].map(item => item[0]).join('');
 
-        const cleanText = text.toLowerCase().trim();
-        let translatedResult = translations[cleanText] || `ترجمة مباشرة: "${text}"`;
+          const direction = isArabic ? 'من العربية إلى الإنجليزية' : 'من الإنجليزية إلى العربية';
 
-        return bot.sendMessage(chatId, `🌐 **الترجمة الفورية:**\n\n- **النص الأصلي:** ${text}\n- **الترجمة للعربية:** ${translatedResult}`, {
-          reply_markup: mainKeyboard
-        });
+          return bot.sendMessage(chatId, `🌐 **الترجمة الفورية (${direction}):**\n\n- **النص الأصلي:** ${text}\n- **الترجمة:** ${translatedText}`, {
+            reply_markup: mainKeyboard
+          });
+        } catch (e) {
+          return bot.sendMessage(chatId, '⚠️ تعذر الاتصال بخدمة الترجمة، يرجى المحاولة لاحقاً.', { reply_markup: mainKeyboard });
+        }
       }
 
+      // 10. تصدير نص إلى ملف
       case 'tool_export': {
         const buffer = Buffer.from(text, 'utf-8');
         userState[chatId] = null;
@@ -249,6 +340,6 @@ bot.on('message', async (msg) => {
   } catch (err) {
     console.error('Error:', err);
     userState[chatId] = null;
-    bot.sendMessage(chatId, '⚠️ حدث خطأ غير متوقع أثناء معالجة الطلب، يرجى المحاولة مرة أخرى.', { reply_markup: mainKeyboard });
+    bot.sendMessage(chatId, '⚠️ حدث خطأ أثناء المعالجة، يرجى المحاولة مرة أخرى.', { reply_markup: mainKeyboard });
   }
 });
