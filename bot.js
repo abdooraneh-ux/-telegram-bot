@@ -24,7 +24,7 @@ process.on('unhandledRejection', (reason) => console.error('Unhandled Rejection:
 // ذاكرة لتتبع حالة المستخدم
 const userState = {};
 
-// القائمة الرئيسية (بدون الترجمة)
+// القائمة الرئيسية
 const mainKeyboard = {
   inline_keyboard: [
     [{ text: '📱 إنشاء QR Code', callback_data: 'tool_qr' }],
@@ -123,7 +123,7 @@ bot.on('callback_query', async (callbackQuery) => {
   bot.answerCallbackQuery(callbackQuery.id);
 });
 
-// معالجة النصوص وتنفيذ الأدوات المتبقية
+// معالجة النصوص وتنفيذ الأدوات
 bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
   const text = msg.text;
