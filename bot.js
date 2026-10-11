@@ -24,7 +24,7 @@ process.on('unhandledRejection', (reason) => console.error('Unhandled Rejection:
 // ذاكرة لتتبع حالة المستخدم
 const userState = {};
 
-// القائمة الرئيسية
+// القائمة الرئيسية (بدون الترجمة)
 const mainKeyboard = {
   inline_keyboard: [
     [{ text: '📱 إنشاء QR Code', callback_data: 'tool_qr' }],
@@ -33,7 +33,6 @@ const mainKeyboard = {
     [{ text: '✨ تنسيق JSON ملون', callback_data: 'tool_json' }],
     [{ text: '🔍 فحص الأمان والرابط', callback_data: 'tool_url' }],
     [{ text: '🌐 تحليل الـ IP', callback_data: 'tool_ip' }],
-    [{ text: '🌐 الترجمة الفورية (عربي/إنجليزي)', callback_data: 'tool_translate' }],
     [{ text: '📝 تصدير نص إلى ملف', callback_data: 'tool_export' }]
   ]
 };
@@ -104,9 +103,6 @@ bot.on('callback_query', async (callbackQuery) => {
     case 'tool_ip':
       replyText = '🌐 أرسل عنوان الـ IP لتحليله وفحص الكلاس والبايتات:';
       break;
-    case 'tool_translate':
-      replyText = '🌐 أرسل النص للترجمة الفورية بين العربية والإنجليزية:';
-      break;
     case 'tool_export':
       replyText = '📝 أرسل النص المراد تصديره كملف نصي (.txt):';
       break;
@@ -127,7 +123,7 @@ bot.on('callback_query', async (callbackQuery) => {
   bot.answerCallbackQuery(callbackQuery.id);
 });
 
-// معالجة النصوص وتنفيذ الأدوات
+// معالجة النصوص وتنفيذ الأدوات المتبقية
 bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
   const text = msg.text;
@@ -298,59 +294,7 @@ bot.on('message', async (msg) => {
         return bot.sendMessage(chatId, resMsg, { reply_markup: mainKeyboard });
       }
 
-      // 9. الترجمة الفورية المحسنة والمستقرة (بدون أخطاء شبكة)
-      case 'tool_translate': {
-        userState[chatId] = null;
-        const cleanText = text.trim();
-        const isArabic = /[\u0600-\u06FF]/.test(cleanText);
-
-        // قاموس أساسي قوي معالج مسبقاً للكلمات والعبارات لضمان الاستجابة الفورية 100% دون انقطاع
-        const dictionary = {
-          'hello world': 'مرحباً بالعالم',
-          'hello': 'مرحباً',
-          'hi': 'أهلاً',
-          'how are you?': 'كيف حالك؟',
-          'welcome': 'أهلاً وسهلاً',
-          'good morning': 'صباح الخير',
-          'good evening': 'مساء الخير',
-          'thank you': 'شكراً لك',
-          'thanks': 'شكراً',
-          'bye': 'مع السلامة',
-          'goodbye': 'وداعاً',
-          'yes': 'نعم',
-          'no': 'لا',
-          'please': 'من فضلك',
-          'friend': 'صديق',
-          'computer': 'حاسوب',
-          'developer': 'مطور برمجيات',
-          'code': 'كود برمجي',
-          'مرحباً': 'Hello',
-          'أهلاً': 'Hi',
-          'كيف حالك؟': 'How are you?',
-          'صباح الخير': 'Good morning',
-          'شكراً': 'Thank you',
-          'صديق': 'Friend'
-        };
-
-        let resultTranslation = dictionary[cleanText.toLowerCase()];
-
-        if (!resultTranslation) {
-          // إذا لم تكن موجودة حرفياً بالقاموس، نقوم بمعالجتها بناءً على الاتجاه اللغوي بدقة
-          if (isArabic) {
-            resultTranslation = `Translation of: [ ${cleanText} ] (English equivalent processed successfully)`;
-          } else {
-            resultTranslation = `الترجمة العربية للعبارة: [ ${cleanText} ]`;
-          }
-        }
-
-        const directionLabel = isArabic ? 'من العربية إلى الإنجليزية' : 'من الإنجليزية إلى العربية';
-
-        return bot.sendMessage(chatId, `🌐 **الترجمة الفورية (${directionLabel}):**\n\n- **النص الأصلي:** ${text}\n- **النتيجة:** ${resultTranslation}`, {
-          reply_markup: mainKeyboard
-        });
-      }
-
-      // 10. تصدير نص إلى ملف
+      // 9. تصدير نص إلى ملف
       case 'tool_export': {
         const buffer = Buffer.from(text, 'utf-8');
         userState[chatId] = null;
