@@ -13,7 +13,7 @@ http.createServer((req, res) => {
   console.log(`Server is listening on port ${PORT}`);
 });
 
-const token = process.env.TELEGRAM_BOT_TOKEN || '8399272057:AAFZ3-cCWOLFL0VA9Z5nQXTIFp6D3URomkc';
+const token = process.env.TELEGRAM_BOT_TOKEN || 'ضع_التوكن_هنا';
 const bot = new TelegramBot(token, {
   polling: { interval: 300, autoStart: true, params: { timeout: 10 } }
 });
@@ -36,7 +36,7 @@ async function checkSubscription(chatId, userId) {
     return ['creator', 'administrator', 'member'].includes(member.status);
   } catch (error) {
     console.error('Error checking subscription:', error);
-    return true; // في حال حدوث خطأ يتجاوز التنسيق تجنباً لتعطيل البوت
+    return true; 
   }
 }
 
@@ -57,7 +57,7 @@ function sendSubscribeMessage(chatId) {
   );
 }
 
-// القائمة الرئيسية للأدوات (شاملة الأدوات القديمة + أدوات الصور الجديدة)
+// القائمة الرئيسية للأدوات
 const mainKeyboard = {
   inline_keyboard: [
     [{ text: '🖼️ استخراج النص من الصورة (OCR)', callback_data: 'tool_ocr' }],
@@ -70,7 +70,8 @@ const mainKeyboard = {
     [{ text: '✨ تنسيق JSON ملون', callback_data: 'tool_json' }],
     [{ text: '🔍 فحص الأمان والرابط', callback_data: 'tool_url' }],
     [{ text: '🌐 تحليل الـ IP', callback_data: 'tool_ip' }],
-    [{ text: '📝 تصدير نص إلى ملف', callback_data: 'tool_export' }]
+    [{ text: '📝 تصدير نص إلى ملف', callback_data: 'tool_export' }],
+    [{ text: '👨‍💻 التواصل مع المطور', url: 'https://t.me/r_0u_x' }]
   ]
 };
 
@@ -92,7 +93,7 @@ bot.onText(/\/start/, async (msg) => {
   }
 
   userState[chatId] = null;
-  bot.sendMessage(chatId, `أهلاً بك في بوت الأدوات البرمجية الشامل! 🛠️\nاختر الخدمة المطلوبة من القائمة أدناه:`, {
+  bot.sendMessage(chatId, `أهلاً بك في بوت الأدوات الشامل! 🛠️\nاختر الخدمة المطلوبة من القائمة أدناه:`, {
     reply_markup: mainKeyboard
   });
 });
@@ -105,13 +106,12 @@ bot.on('callback_query', async (callbackQuery) => {
   const userId = callbackQuery.from.id;
   const messageId = message.message_id;
 
-  // التحقق من زر التأكيد بعد الاشتراك
   if (category === 'check_sub') {
     const isSubscribed = await checkSubscription(chatId, userId);
     if (isSubscribed) {
       bot.answerCallbackQuery(callbackQuery.id, { text: '✅ شكراً لاشتراكك! تم تفعيل البوت.' });
       userState[chatId] = null;
-      return bot.sendMessage(chatId, `أهلاً بك في بوت الأدوات البرمجية الشامل! 🛠️\nاختر الخدمة المطلوبة من القائمة أدناه:`, {
+      return bot.sendMessage(chatId, `أهلاً بك في بوت الأدوات الشامل! 🛠️\nاختر الخدمة المطلوبة من القائمة أدناه:`, {
         reply_markup: mainKeyboard
       });
     } else {
@@ -120,7 +120,6 @@ bot.on('callback_query', async (callbackQuery) => {
     }
   }
 
-  // فحص الاشتراك عند الضغط على أي زر آخر
   const isSubscribed = await checkSubscription(chatId, userId);
   if (!isSubscribed) {
     bot.answerCallbackQuery(callbackQuery.id);
@@ -130,7 +129,7 @@ bot.on('callback_query', async (callbackQuery) => {
   if (category === 'main_menu') {
     userState[chatId] = null;
     try {
-      await bot.editMessageText(`أهلاً بك في بوت الأدوات البرمجية الشامل! 🛠️\nاختر الخدمة المطلوبة من القائمة أدناه:`, {
+      await bot.editMessageText(`أهلاً بك في بوت الأدوات الشامل! 🛠️\nاختر الخدمة المطلوبة من القائمة أدناه:`, {
         chat_id: chatId,
         message_id: messageId,
         reply_markup: mainKeyboard
@@ -168,10 +167,10 @@ bot.on('callback_query', async (callbackQuery) => {
       replyText = '🔓 أرسل كود Base64 لفك تشفيره:';
       break;
     case 'tool_num_enc':
-      replyText = '🔢 أرسل النص المراد تشفيره بالأنظمة العددية (Binary, Octal, Decimal, Hex):';
+      replyText = '🔢 أرسل النص المراد تشفيره بالأنظمة العددية:';
       break;
     case 'tool_num_dec':
-      replyText = '🔓 أرسل القيم العددية المفصولة بمسافات لفك تشفيرها إلى نص:';
+      replyText = '🔓 أرسل القيم العددية المفصولة بمسافات لفك تشفيرها:';
       break;
     case 'tool_json':
       replyText = '✨ أرسل نص الـ JSON لتنسيقه وتلوينه:';
@@ -180,7 +179,7 @@ bot.on('callback_query', async (callbackQuery) => {
       replyText = '🔍 أرسل الرابط لفحص أمانه وكشف التهديدات:';
       break;
     case 'tool_ip':
-      replyText = '🌐 أرسل عنوان الـ IP لتحليله وفحص الكلاس والبايتات:';
+      replyText = '🌐 أرسل عنوان الـ IP لتحليله:';
       break;
     case 'tool_export':
       replyText = '📝 أرسل النص المراد تصديره كملف نصي (.txt):';
@@ -202,7 +201,7 @@ bot.on('callback_query', async (callbackQuery) => {
   bot.answerCallbackQuery(callbackQuery.id);
 });
 
-// معالجة الصور المرفقة للأدوات الجديدة (OCR والضغط والتحويل والمقاسات)
+// معالجة الصور
 bot.on('photo', async (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
@@ -215,7 +214,7 @@ bot.on('photo', async (msg) => {
   const currentTool = userState[chatId];
   if (!currentTool || (!currentTool.startsWith('tool_img_') && currentTool !== 'tool_ocr')) return;
 
-  const photo = msg.photo[msg.photo.length - 1]; // أعلى دقة للصورة
+  const photo = msg.photo[msg.photo.length - 1];
   const fileId = photo.file_id;
 
   const waitMsg = await bot.sendMessage(chatId, '⏳ جاري معالجة الصورة، يرجى الانتظار...');
@@ -300,7 +299,7 @@ bot.on('photo', async (msg) => {
   }
 });
 
-// معالجة النصوص وتنفيذ الأدوات النصية السابقة (كاملة ودون تعديل)
+// معالجة النصوص
 bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
