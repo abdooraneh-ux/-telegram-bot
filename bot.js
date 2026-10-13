@@ -71,7 +71,7 @@ const mainKeyboard = {
     [{ text: '🔍 فحص الأمان والرابط', callback_data: 'tool_url' }],
     [{ text: '🌐 تحليل الـ IP', callback_data: 'tool_ip' }],
     [{ text: '📝 تصدير نص إلى ملف', callback_data: 'tool_export' }],
-    [{ text: '👨‍💻 التواصل مع المطور', url: 'https://t.me/r_0u_x' }]
+    [{ text: '👨‍💻 التواصل مع المطور', url: '@r0_ux' }]
   ]
 };
 
