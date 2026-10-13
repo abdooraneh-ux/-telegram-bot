@@ -18,9 +18,6 @@ const bot = new TelegramBot(token, {
   polling: { interval: 300, autoStart: true, params: { timeout: 10 } }
 });
 
-// ⚠️ ضع معرف قناتك هنا (مع الـ @)
-const CHANNEL_USERNAME = '@YourChannelUsername'; 
-
 // حماية السيرفر من الانهيار
 bot.on('polling_error', (error) => console.log('Polling Error:', error.code || error.message));
 process.on('uncaughtException', (err) => console.error('Uncaught Exception:', err));
@@ -29,35 +26,7 @@ process.on('unhandledRejection', (reason) => console.error('Unhandled Rejection:
 // ذاكرة لتتبع حالة المستخدم
 const userState = {};
 
-// دالة التحقق من اشتراك المستخدم في القناة
-async function checkSubscription(chatId, userId) {
-  try {
-    const member = await bot.getChatMember(CHANNEL_USERNAME, userId);
-    return ['creator', 'administrator', 'member'].includes(member.status);
-  } catch (error) {
-    console.error('Error checking subscription:', error);
-    return true; 
-  }
-}
-
-// رسالة المطالبة بالاشتراك
-function sendSubscribeMessage(chatId) {
-  const channelLink = `https://t.me/${CHANNEL_USERNAME.replace('@', '')}`;
-  const subscribeKeyboard = {
-    inline_keyboard: [
-      [{ text: '📢 اشترك في القناة من هنا', url: channelLink }],
-      [{ text: '✅ تحقّق من الاشتراك', callback_data: 'check_sub' }]
-    ]
-  };
-
-  bot.sendMessage(
-    chatId,
-    `⚠️ **تنبيه:** لاستخدام البوت، يجب عليك الاشتراك في القناة أولاً!\n\nاشترك ثم اضغط على زر **تحقّق من الاشتراك**.`,
-    { parse_mode: 'Markdown', reply_markup: subscribeKeyboard }
-  );
-}
-
-// القائمة الرئيسية للأدوات
+// القائمة الرئيسية للأدوات (بدون قناة + زر تواصل مباشر لحسابك)
 const mainKeyboard = {
   inline_keyboard: [
     [{ text: '🖼️ استخراج النص من الصورة (OCR)', callback_data: 'tool_ocr' }],
@@ -71,7 +40,7 @@ const mainKeyboard = {
     [{ text: '🔍 فحص الأمان والرابط', callback_data: 'tool_url' }],
     [{ text: '🌐 تحليل الـ IP', callback_data: 'tool_ip' }],
     [{ text: '📝 تصدير نص إلى ملف', callback_data: 'tool_export' }],
-    [{ text: '👨‍💻 التواصل مع المطور', url: '@r0_ux' }]
+    [{ text: '👨‍💻 التواصل مع المطور', url: 'https://t.me/r0_ux' }]
   ]
 };
 
@@ -83,17 +52,10 @@ const backKeyboard = {
 };
 
 // الأمر /start
-bot.onText(/\/start/, async (msg) => {
+bot.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id;
-  const userId = msg.from.id;
-
-  const isSubscribed = await checkSubscription(chatId, userId);
-  if (!isSubscribed) {
-    return sendSubscribeMessage(chatId);
-  }
-
   userState[chatId] = null;
-  bot.sendMessage(chatId, `أهلاً بك في بوت الأدوات الشامل! 🛠️\nاختر الخدمة المطلوبة من القائمة أدناه:`, {
+  bot.sendMessage(chatId, `أهلاً بك في بوت الأدوات البرمجية الشامل! 🛠️\nاختر الخدمة المطلوبة من القائمة أدناه:`, {
     reply_markup: mainKeyboard
   });
 });
@@ -103,33 +65,12 @@ bot.on('callback_query', async (callbackQuery) => {
   const message = callbackQuery.message;
   const category = callbackQuery.data;
   const chatId = message.chat.id;
-  const userId = callbackQuery.from.id;
   const messageId = message.message_id;
-
-  if (category === 'check_sub') {
-    const isSubscribed = await checkSubscription(chatId, userId);
-    if (isSubscribed) {
-      bot.answerCallbackQuery(callbackQuery.id, { text: '✅ شكراً لاشتراكك! تم تفعيل البوت.' });
-      userState[chatId] = null;
-      return bot.sendMessage(chatId, `أهلاً بك في بوت الأدوات الشامل! 🛠️\nاختر الخدمة المطلوبة من القائمة أدناه:`, {
-        reply_markup: mainKeyboard
-      });
-    } else {
-      bot.answerCallbackQuery(callbackQuery.id, { text: '❌ لم تشترك في القناة بعد!', show_alert: true });
-      return;
-    }
-  }
-
-  const isSubscribed = await checkSubscription(chatId, userId);
-  if (!isSubscribed) {
-    bot.answerCallbackQuery(callbackQuery.id);
-    return sendSubscribeMessage(chatId);
-  }
 
   if (category === 'main_menu') {
     userState[chatId] = null;
     try {
-      await bot.editMessageText(`أهلاً بك في بوت الأدوات الشامل! 🛠️\nاختر الخدمة المطلوبة من القائمة أدناه:`, {
+      await bot.editMessageText(`أهلاً بك في بوت الأدوات البرمجية الشامل! 🛠️\nاختر الخدمة المطلوبة من القائمة أدناه:`, {
         chat_id: chatId,
         message_id: messageId,
         reply_markup: mainKeyboard
@@ -204,13 +145,6 @@ bot.on('callback_query', async (callbackQuery) => {
 // معالجة الصور
 bot.on('photo', async (msg) => {
   const chatId = msg.chat.id;
-  const userId = msg.from.id;
-
-  const isSubscribed = await checkSubscription(chatId, userId);
-  if (!isSubscribed) {
-    return sendSubscribeMessage(chatId);
-  }
-
   const currentTool = userState[chatId];
   if (!currentTool || (!currentTool.startsWith('tool_img_') && currentTool !== 'tool_ocr')) return;
 
@@ -302,15 +236,9 @@ bot.on('photo', async (msg) => {
 // معالجة النصوص
 bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
-  const userId = msg.from.id;
   const text = msg.text;
 
   if (!text || text.startsWith('/start')) return;
-
-  const isSubscribed = await checkSubscription(chatId, userId);
-  if (!isSubscribed) {
-    return sendSubscribeMessage(chatId);
-  }
 
   const currentTool = userState[chatId];
   if (!currentTool) return;
