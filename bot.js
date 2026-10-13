@@ -26,7 +26,11 @@ process.on('unhandledRejection', (reason) => console.error('Unhandled Rejection:
 // ذاكرة لتتبع حالة المستخدم
 const userState = {};
 
-// القائمة الرئيسية للأدوات (بدون قناة + زر تواصل مباشر لحسابك)
+// رابط القناة وحساب المطور
+const CHANNEL_URL = 'https://t.me/r0ux0';
+const DEVELOPER_URL = 'https://t.me/r0_ux';
+
+// القائمة الرئيسية للأدوات
 const mainKeyboard = {
   inline_keyboard: [
     [{ text: '🖼️ استخراج النص من الصورة (OCR)', callback_data: 'tool_ocr' }],
@@ -40,7 +44,10 @@ const mainKeyboard = {
     [{ text: '🔍 فحص الأمان والرابط', callback_data: 'tool_url' }],
     [{ text: '🌐 تحليل الـ IP', callback_data: 'tool_ip' }],
     [{ text: '📝 تصدير نص إلى ملف', callback_data: 'tool_export' }],
-    [{ text: '👨‍💻 التواصل مع المطور', url: 'https://t.me/r0_ux' }]
+    [
+      { text: '📢 قناتنا على تيليجرام', url: CHANNEL_URL },
+      { text: '👨‍💻 المطور', url: DEVELOPER_URL }
+    ]
   ]
 };
 
