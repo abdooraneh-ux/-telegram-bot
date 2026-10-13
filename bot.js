@@ -13,7 +13,7 @@ http.createServer((req, res) => {
   console.log(`Server is listening on port ${PORT}`);
 });
 
-const token = process.env.TELEGRAM_BOT_TOKEN || 'ضع_التوكن_هنا';
+const token = process.env.TELEGRAM_BOT_TOKEN || '8399272057:AAFZ3-cCWOLFL0VA9Z5nQXTIFp6D3URomkc';
 const bot = new TelegramBot(token, {
   polling: { interval: 300, autoStart: true, params: { timeout: 10 } }
 });
