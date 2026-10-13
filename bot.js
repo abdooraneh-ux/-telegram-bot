@@ -1,6 +1,8 @@
 const TelegramBot = require('node-telegram-bot-api');
 const http = require('http');
 const QRCode = require('qrcode');
+const sharp = require('sharp');
+const Tesseract = require('tesseract.js');
 
 // 1. خادم HTTP للبقاء نشطاً على Render (24/7)
 const PORT = process.env.PORT || 3000;
@@ -16,6 +18,9 @@ const bot = new TelegramBot(token, {
   polling: { interval: 300, autoStart: true, params: { timeout: 10 } }
 });
 
+// ⚠️ ضع معرف قناتك هنا (مع الـ @)
+const CHANNEL_USERNAME = '@YourChannelUsername'; 
+
 // حماية السيرفر من الانهيار
 bot.on('polling_error', (error) => console.log('Polling Error:', error.code || error.message));
 process.on('uncaughtException', (err) => console.error('Uncaught Exception:', err));
@@ -24,9 +29,41 @@ process.on('unhandledRejection', (reason) => console.error('Unhandled Rejection:
 // ذاكرة لتتبع حالة المستخدم
 const userState = {};
 
-// القائمة الرئيسية
+// دالة التحقق من اشتراك المستخدم في القناة
+async function checkSubscription(chatId, userId) {
+  try {
+    const member = await bot.getChatMember(CHANNEL_USERNAME, userId);
+    return ['creator', 'administrator', 'member'].includes(member.status);
+  } catch (error) {
+    console.error('Error checking subscription:', error);
+    return true; // في حال حدوث خطأ يتجاوز التنسيق تجنباً لتعطيل البوت
+  }
+}
+
+// رسالة المطالبة بالاشتراك
+function sendSubscribeMessage(chatId) {
+  const channelLink = `https://t.me/${CHANNEL_USERNAME.replace('@', '')}`;
+  const subscribeKeyboard = {
+    inline_keyboard: [
+      [{ text: '📢 اشترك في القناة من هنا', url: channelLink }],
+      [{ text: '✅ تحقّق من الاشتراك', callback_data: 'check_sub' }]
+    ]
+  };
+
+  bot.sendMessage(
+    chatId,
+    `⚠️ **تنبيه:** لاستخدام البوت، يجب عليك الاشتراك في القناة أولاً!\n\nاشترك ثم اضغط على زر **تحقّق من الاشتراك**.`,
+    { parse_mode: 'Markdown', reply_markup: subscribeKeyboard }
+  );
+}
+
+// القائمة الرئيسية للأدوات (شاملة الأدوات القديمة + أدوات الصور الجديدة)
 const mainKeyboard = {
   inline_keyboard: [
+    [{ text: '🖼️ استخراج النص من الصورة (OCR)', callback_data: 'tool_ocr' }],
+    [{ text: '📉 ضغط وتقليل حجم الصورة', callback_data: 'tool_img_compress' }],
+    [{ text: '🔄 تحويل الصورة (PNG ↔ JPG)', callback_data: 'tool_img_convert' }],
+    [{ text: '👤 مقاس بروفايل تيليجرام (640x640)', callback_data: 'tool_img_avatar' }],
     [{ text: '📱 إنشاء QR Code', callback_data: 'tool_qr' }],
     [{ text: '🔐 تشفير Base64', callback_data: 'tool_base64_enc' }, { text: '🔓 فك Base64', callback_data: 'tool_base64_dec' }],
     [{ text: '🔢 تشفير أنظمة أعداد', callback_data: 'tool_num_enc' }, { text: '🔓 فك أنظمة أعداد', callback_data: 'tool_num_dec' }],
@@ -45,8 +82,15 @@ const backKeyboard = {
 };
 
 // الأمر /start
-bot.onText(/\/start/, (msg) => {
+bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id;
+  const userId = msg.from.id;
+
+  const isSubscribed = await checkSubscription(chatId, userId);
+  if (!isSubscribed) {
+    return sendSubscribeMessage(chatId);
+  }
+
   userState[chatId] = null;
   bot.sendMessage(chatId, `أهلاً بك في بوت الأدوات البرمجية الشامل! 🛠️\nاختر الخدمة المطلوبة من القائمة أدناه:`, {
     reply_markup: mainKeyboard
@@ -58,7 +102,30 @@ bot.on('callback_query', async (callbackQuery) => {
   const message = callbackQuery.message;
   const category = callbackQuery.data;
   const chatId = message.chat.id;
+  const userId = callbackQuery.from.id;
   const messageId = message.message_id;
+
+  // التحقق من زر التأكيد بعد الاشتراك
+  if (category === 'check_sub') {
+    const isSubscribed = await checkSubscription(chatId, userId);
+    if (isSubscribed) {
+      bot.answerCallbackQuery(callbackQuery.id, { text: '✅ شكراً لاشتراكك! تم تفعيل البوت.' });
+      userState[chatId] = null;
+      return bot.sendMessage(chatId, `أهلاً بك في بوت الأدوات البرمجية الشامل! 🛠️\nاختر الخدمة المطلوبة من القائمة أدناه:`, {
+        reply_markup: mainKeyboard
+      });
+    } else {
+      bot.answerCallbackQuery(callbackQuery.id, { text: '❌ لم تشترك في القناة بعد!', show_alert: true });
+      return;
+    }
+  }
+
+  // فحص الاشتراك عند الضغط على أي زر آخر
+  const isSubscribed = await checkSubscription(chatId, userId);
+  if (!isSubscribed) {
+    bot.answerCallbackQuery(callbackQuery.id);
+    return sendSubscribeMessage(chatId);
+  }
 
   if (category === 'main_menu') {
     userState[chatId] = null;
@@ -79,6 +146,18 @@ bot.on('callback_query', async (callbackQuery) => {
 
   let replyText = '';
   switch (category) {
+    case 'tool_ocr':
+      replyText = '🖼️ أرسل الصورة التي تريد استخراج النص منها (يدعم العربية والأجنبية):';
+      break;
+    case 'tool_img_compress':
+      replyText = '📉 أرسل الصورة المراد ضغطها وتقليل حجمها:';
+      break;
+    case 'tool_img_convert':
+      replyText = '🔄 أرسل الصورة لتحويلها (إذا كانت PNG ستتحول إلى JPG والعكس):';
+      break;
+    case 'tool_img_avatar':
+      replyText = '👤 أرسل الصورة لتعديل مقاسها وتنسيقها لتناسب بروفايل تيليجرام (640x640):';
+      break;
     case 'tool_qr':
       replyText = '📱 أرسل النص، الرابط، أو الرقم لتحويله إلى رمز QR:';
       break;
@@ -123,19 +202,122 @@ bot.on('callback_query', async (callbackQuery) => {
   bot.answerCallbackQuery(callbackQuery.id);
 });
 
-// معالجة النصوص وتنفيذ الأدوات
+// معالجة الصور المرفقة للأدوات الجديدة (OCR والضغط والتحويل والمقاسات)
+bot.on('photo', async (msg) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+
+  const isSubscribed = await checkSubscription(chatId, userId);
+  if (!isSubscribed) {
+    return sendSubscribeMessage(chatId);
+  }
+
+  const currentTool = userState[chatId];
+  if (!currentTool || (!currentTool.startsWith('tool_img_') && currentTool !== 'tool_ocr')) return;
+
+  const photo = msg.photo[msg.photo.length - 1]; // أعلى دقة للصورة
+  const fileId = photo.file_id;
+
+  const waitMsg = await bot.sendMessage(chatId, '⏳ جاري معالجة الصورة، يرجى الانتظار...');
+
+  try {
+    const fileStream = bot.getFileStream(fileId);
+    const chunks = [];
+    for await (const chunk of fileStream) {
+      chunks.push(chunk);
+    }
+    const inputBuffer = Buffer.concat(chunks);
+
+    switch (currentTool) {
+      case 'tool_ocr': {
+        const { data: { text } } = await Tesseract.recognize(inputBuffer, 'ara+eng');
+        userState[chatId] = null;
+        await bot.deleteMessage(chatId, waitMsg.message_id);
+        if (!text || text.trim().length === 0) {
+          return bot.sendMessage(chatId, '⚠️ لم يتم التعرف على أي نص داخل الصورة.', { reply_markup: mainKeyboard });
+        }
+        return bot.sendMessage(chatId, `📝 **النص المستخرج من الصورة:**\n\n\`\`\`\n${text.trim()}\n\`\`\``, {
+          parse_mode: 'Markdown',
+          reply_markup: mainKeyboard
+        });
+      }
+
+      case 'tool_img_compress': {
+        const outputBuffer = await sharp(inputBuffer)
+          .jpeg({ quality: 50 })
+          .toBuffer();
+        userState[chatId] = null;
+        await bot.deleteMessage(chatId, waitMsg.message_id);
+        return bot.sendDocument(chatId, outputBuffer, {
+          caption: '📉 **تم ضغط الصورة وتقليل حجمها بنجاح!**',
+          reply_markup: mainKeyboard
+        }, { filename: 'compressed_image.jpg', contentType: 'image/jpeg' });
+      }
+
+      case 'tool_img_convert': {
+        const metadata = await sharp(inputBuffer).metadata();
+        let outputBuffer;
+        let ext = 'jpg';
+        let mime = 'image/jpeg';
+
+        if (metadata.format === 'png') {
+          outputBuffer = await sharp(inputBuffer).jpeg().toBuffer();
+          ext = 'jpg';
+          mime = 'image/jpeg';
+        } else {
+          outputBuffer = await sharp(inputBuffer).png().toBuffer();
+          ext = 'png';
+          mime = 'image/png';
+        }
+
+        userState[chatId] = null;
+        await bot.deleteMessage(chatId, waitMsg.message_id);
+        return bot.sendDocument(chatId, outputBuffer, {
+          caption: `🔄 **تم تحويل صيغة الصورة إلى (${ext.toUpperCase()}) بنجاح!**`,
+          reply_markup: mainKeyboard
+        }, { filename: `converted_image.${ext}`, contentType: mime });
+      }
+
+      case 'tool_img_avatar': {
+        const outputBuffer = await sharp(inputBuffer)
+          .resize(640, 640, { fit: 'cover' })
+          .jpeg({ quality: 90 })
+          .toBuffer();
+
+        userState[chatId] = null;
+        await bot.deleteMessage(chatId, waitMsg.message_id);
+        return bot.sendPhoto(chatId, outputBuffer, {
+          caption: '👤 **تم تعديل الصورة لتناسب مقاس بروفايل تيليجرام (640x640)!**',
+          reply_markup: mainKeyboard
+        });
+      }
+    }
+  } catch (err) {
+    console.error('Image Error:', err);
+    userState[chatId] = null;
+    await bot.deleteMessage(chatId, waitMsg.message_id);
+    bot.sendMessage(chatId, '⚠️ حدث خطأ أثناء معالجة الصورة، يرجى المحاولة مرة أخرى.', { reply_markup: mainKeyboard });
+  }
+});
+
+// معالجة النصوص وتنفيذ الأدوات النصية السابقة (كاملة ودون تعديل)
 bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
+  const userId = msg.from.id;
   const text = msg.text;
 
   if (!text || text.startsWith('/start')) return;
+
+  const isSubscribed = await checkSubscription(chatId, userId);
+  if (!isSubscribed) {
+    return sendSubscribeMessage(chatId);
+  }
 
   const currentTool = userState[chatId];
   if (!currentTool) return;
 
   try {
     switch (currentTool) {
-      // 1. إنشاء QR
       case 'tool_qr': {
         const qrImage = await QRCode.toBuffer(text);
         userState[chatId] = null;
@@ -145,7 +327,6 @@ bot.on('message', async (msg) => {
         });
       }
 
-      // 2. تشفير Base64
       case 'tool_base64_enc': {
         const encoded = Buffer.from(text, 'utf-8').toString('base64');
         userState[chatId] = null;
@@ -155,7 +336,6 @@ bot.on('message', async (msg) => {
         });
       }
 
-      // 3. فك تشفير Base64
       case 'tool_base64_dec': {
         try {
           const decoded = Buffer.from(text, 'base64').toString('utf-8');
@@ -168,7 +348,6 @@ bot.on('message', async (msg) => {
         }
       }
 
-      // 4. تشفير الأنظمة العددية
       case 'tool_num_enc': {
         const buffer = Buffer.from(text, 'utf-8');
         const binary = Array.from(buffer).map(b => b.toString(2).padStart(8, '0')).join(' ');
@@ -186,7 +365,6 @@ bot.on('message', async (msg) => {
         return bot.sendMessage(chatId, resMsg, { parse_mode: 'Markdown', reply_markup: mainKeyboard });
       }
 
-      // 5. فك تشفير الأنظمة العددية
       case 'tool_num_dec': {
         try {
           const parts = text.trim().split(/\s+/);
@@ -211,7 +389,6 @@ bot.on('message', async (msg) => {
         }
       }
 
-      // 6. تنسيق JSON ملون
       case 'tool_json': {
         try {
           const parsed = JSON.parse(text);
@@ -226,7 +403,6 @@ bot.on('message', async (msg) => {
         }
       }
 
-      // 7. فحص أمان الرابط
       case 'tool_url': {
         userState[chatId] = null;
         let isSafe = true;
@@ -249,7 +425,6 @@ bot.on('message', async (msg) => {
         });
       }
 
-      // 8. تحليل IP (Class + Bytes)
       case 'tool_ip': {
         userState[chatId] = null;
         const ipParts = text.trim().split('.');
@@ -294,7 +469,6 @@ bot.on('message', async (msg) => {
         return bot.sendMessage(chatId, resMsg, { reply_markup: mainKeyboard });
       }
 
-      // 9. تصدير نص إلى ملف
       case 'tool_export': {
         const buffer = Buffer.from(text, 'utf-8');
         userState[chatId] = null;
